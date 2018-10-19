@@ -1,0 +1,466 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+ * See the NOTICE file distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see http://www.gnu.org/licenses/
+-->
+
+<xwikidoc version="1.1">
+  <web>PhenomeCentral</web>
+  <name>PCTestDeplymentConfiguration</name>
+  <language/>
+  <defaultLanguage/>
+  <translation>0</translation>
+  <creator>xwiki:XWiki.Admin</creator>
+  <creationDate>1539117105000</creationDate>
+  <parent>data.WebHome</parent>
+  <author>xwiki:XWiki.Admin</author>
+  <contentAuthor>xwiki:XWiki.Admin</contentAuthor>
+  <date>1539898821000</date>
+  <contentUpdateDate>1539189773000</contentUpdateDate>
+  <version>1.1</version>
+  <title>PhenomeCentral Test Deplyment Configuration</title>
+  <comment/>
+  <minorEdit>false</minorEdit>
+  <syntaxId>xwiki/2.1</syntaxId>
+  <hidden>false</hidden>
+  <content>{{velocity}}
+$xwiki.jsx.use('PhenomeCentral.PCTestDeplymentConfiguration')##
+##
+##
+{{html}}
+Please, select branches for the following GitHub repositories for a PhenomeCentral test build deployment.
+&lt;div id="deploy-content"&gt;&lt;/div&gt;
+{{/html}}
+{{/velocity}}</content>
+  <object>
+    <name>PhenomeCentral.PCTestDeplymentConfiguration</name>
+    <number>0</number>
+    <className>XWiki.JavaScriptExtension</className>
+    <guid>4521dd24-2e6d-4402-9dd4-65e70e217d80</guid>
+    <class>
+      <name>XWiki.JavaScriptExtension</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <cache>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>cache</name>
+        <number>5</number>
+        <prettyName>Caching policy</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators> ,|</separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>long|short|default|forbid</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </cache>
+      <code>
+        <disabled>0</disabled>
+        <name>code</name>
+        <number>2</number>
+        <prettyName>Code</prettyName>
+        <rows>20</rows>
+        <size>50</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </code>
+      <name>
+        <disabled>0</disabled>
+        <name>name</name>
+        <number>1</number>
+        <prettyName>Name</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </name>
+      <parse>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>yesno</displayType>
+        <name>parse</name>
+        <number>4</number>
+        <prettyName>Parse content</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </parse>
+      <use>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>use</name>
+        <number>3</number>
+        <prettyName>Use this extension</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators> ,|</separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>currentPage=Always on this page|onDemand=On demand|always=Always on this wiki</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </use>
+    </class>
+    <property>
+      <cache>long</cache>
+    </property>
+    <property>
+      <code>var container = $('deploy-content');
+var BASE_API_URL = 'https://api.github.com/repos/phenotips/';
+var BASE_GITREPO_URL = 'https://github.com/phenotips/';
+
+var repos = [
+            'patient-network',
+            'remote-matching',
+            'phenomecentral.org'
+           ];
+
+var selects = {};
+
+var createCORSRequest = function(method, url) {
+    var xhr = new XMLHttpRequest();
+    if ("withCredentials" in xhr) {
+       // XHR for Chrome/Firefox/Opera/Safari.
+      xhr.open(method, url, true);
+    } else if (typeof XDomainRequest != "undefined") {
+      // XDomainRequest for IE.
+      xhr = new XDomainRequest();
+      xhr.open(method, url);
+    } else {
+      // CORS not supported.
+      xhr = null;
+    }
+    return xhr;
+};
+
+
+var generateBranchSelect = function (repo, json) {
+    var repoLink = new Element('a', {'href': BASE_GITREPO_URL + repo, 'target': '_blank'}).update(repo);
+    var selectDiv = new Element('div', {'class' : 'repo-select'}).insert(new Element('label', {'class' : 'repo-label'}).update(repoLink));
+    var select = new Element('select', {'id': 'repo-select-' + repo});
+    json.each(function(branch) {
+        select.insert(new Element('option', {'value': branch.name}).update(branch.name));
+    });
+    selectDiv.insert(select);
+    return selectDiv;
+}
+
+var requestReposInfo = function () {
+  var requested = 0;
+  repos.each(function (repo) {
+    var xhr = createCORSRequest('GET', BASE_API_URL + repo + '/branches');
+    if (!xhr) { return; } // CORS not supported
+    // Response handlers
+    xhr.onload = function() {
+        var response = JSON.parse(xhr.responseText);
+        if (response) {
+            selects[repo] = generateBranchSelect(repo, response);
+            requested++;
+            if (requested == repos.length) {
+                updateUI();
+            }
+        } else {
+            console.log("[!] Error parsing patient data JSON");
+        }
+    };
+
+    xhr.onerror = function() {
+        return;
+    };
+
+    xhr.send();
+  });
+}
+
+var updateUI = function () {
+    repos.each(function (repo) {
+        container.insert(selects[repo]);
+    });
+
+    var deployNameInput = new Element('input', {'class' : 'deploy-input', 'type' : 'text', 'id':'deploy-name'});
+    var deployNameDiv = new Element('div', {'class' : 'deploy-name'});
+    deployNameDiv.insert(new Element('label', {'class' : 'deploy-name-label'}).update('Deploy build name:'));
+    deployNameDiv.insert(deployNameInput);
+    container.insert(deployNameDiv);
+
+    var button = new Element('input', {'class' : 'button', 'type' : 'button', 'id':'deploy', 'value':'Deploy'});
+    container.insert(button);
+
+    button.observe('click', function (event) {
+        var url = new XWiki.Document('PCTestDeploymentService', 'PhenomeCentral').getURL('get');
+        new Ajax.Request(url, {
+              parameters: {
+                'pnBrnachName' : $('repo-select-patient-network').value,
+                'rmBrnachName' : $('repo-select-remote-matching').value,
+                'pcBrnachName' : $('repo-select-phenomecentral.org').value,
+                'buildName' : $('deploy-name').value
+              },
+              method: "get",
+              onCreate : function() {
+                console.log('Sending');
+              },
+              onSuccess: function(response) {
+                console.log('Success');
+              },
+              onComplete : function() {
+                console.log('Complete');
+              }
+            }
+        );
+    });
+}
+
+requestReposInfo();</code>
+    </property>
+    <property>
+      <name></name>
+    </property>
+    <property>
+      <parse/>
+    </property>
+    <property>
+      <use>currentPage</use>
+    </property>
+  </object>
+  <object>
+    <name>PhenomeCentral.PCTestDeplymentConfiguration</name>
+    <number>0</number>
+    <className>XWiki.StyleSheetExtension</className>
+    <guid>1d65c06b-bf33-4760-8d45-ed180ee45931</guid>
+    <class>
+      <name>XWiki.StyleSheetExtension</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <cache>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>cache</name>
+        <number>5</number>
+        <prettyName>Caching policy</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators> ,|</separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>long|short|default|forbid</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </cache>
+      <code>
+        <disabled>0</disabled>
+        <name>code</name>
+        <number>2</number>
+        <prettyName>Code</prettyName>
+        <rows>20</rows>
+        <size>50</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </code>
+      <contentType>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>contentType</name>
+        <number>6</number>
+        <prettyName>Content Type</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>CSS|LESS</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </contentType>
+      <name>
+        <disabled>0</disabled>
+        <name>name</name>
+        <number>1</number>
+        <prettyName>Name</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </name>
+      <parse>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>yesno</displayType>
+        <name>parse</name>
+        <number>4</number>
+        <prettyName>Parse content</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </parse>
+      <use>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>use</name>
+        <number>3</number>
+        <prettyName>Use this extension</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators> ,|</separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>currentPage=Always on this page|onDemand=On demand|always=Always on this wiki</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </use>
+    </class>
+    <property>
+      <cache>long</cache>
+    </property>
+    <property>
+      <code>.repo-select {
+  line-height: 2.5em;
+}
+.repo-select select {
+  min-width: 17em;
+}
+.repo-label {
+  font-weight: 700;
+  margin-right: 1.5em;
+  width: 10em;
+  display: inline-block;
+}
+.deploy-name-label {
+  width: 10em;
+  display: inline-block;
+  margin-right: .5em;
+}
+.deploy-input {
+  width: 17em!important;
+  margin-left: 1em;
+}
+.deploy-name {
+  line-height: 2.5em;
+}
+#deploy {
+  margin: 1em;
+}</code>
+    </property>
+    <property>
+      <contentType>CSS</contentType>
+    </property>
+    <property>
+      <name></name>
+    </property>
+    <property>
+      <parse/>
+    </property>
+    <property>
+      <use>currentPage</use>
+    </property>
+  </object>
+  <object>
+    <name>PhenomeCentral.PCTestDeplymentConfiguration</name>
+    <number>0</number>
+    <className>XWiki.XWikiRights</className>
+    <guid>564211c2-bf21-4151-a34b-1477024f783d</guid>
+    <class>
+      <name>XWiki.XWikiRights</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <allow>
+        <defaultValue>1</defaultValue>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>allow</displayType>
+        <name>allow</name>
+        <number>4</number>
+        <prettyName>Allow/Deny</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </allow>
+      <groups>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>input</displayType>
+        <multiSelect>1</multiSelect>
+        <name>groups</name>
+        <number>1</number>
+        <picker>1</picker>
+        <prettyName>Groups</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <size>5</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.GroupsClass</classType>
+      </groups>
+      <levels>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>1</multiSelect>
+        <name>levels</name>
+        <number>2</number>
+        <prettyName>Levels</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <size>3</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.LevelsClass</classType>
+      </levels>
+      <users>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>input</displayType>
+        <multiSelect>1</multiSelect>
+        <name>users</name>
+        <number>3</number>
+        <picker>1</picker>
+        <prettyName>Users</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <size>5</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.UsersClass</classType>
+      </users>
+    </class>
+    <property>
+      <allow>1</allow>
+    </property>
+    <property>
+      <groups>xwiki:XWiki.XWikiAdminGroup,</groups>
+    </property>
+    <property>
+      <levels>edit</levels>
+    </property>
+    <property>
+      <users/>
+    </property>
+  </object>
+</xwikidoc>

@@ -39,12 +39,41 @@
   <hidden>false</hidden>
   <content>{{velocity}}
 $xwiki.jsx.use('PhenomeCentral.PCTestDeplymentConfiguration')##
+$xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
 ##
 ##
 {{html}}
 Please, select branches for the following GitHub repositories for a PhenomeCentral test build deployment.
 &lt;div id="deploy-content"&gt;&lt;/div&gt;
 {{/html}}
+##
+##
+== OpenStack PC running test instances ==
+## TABLE HEADER
+#set ($headerNames = ['Server Name', 'Branches', 'IP', 'Started Time', 'Status', 'Action'])
+(% class="extradata-list server-list-row" %)
+#foreach($headerName in $headerNames)
+  |=(% class="col-label" %)$headerName##
+#end
+
+##=========================================
+## Get list of running OpenStack VM servers
+##=========================================
+## TABLE BODY
+#set ($serverList = $services.pcTestDeployment.listServers())
+#foreach ($obj in $serverList)
+  #set($beginTime = $obj.get('created').replace('T',' ').replace('Z',''))
+  #set($pn = $obj.get('metadata').optString('pn'))
+  #set($rm = $obj.get('metadata').optString('rm'))
+  #set($pc = $obj.get('metadata').optString('pc'))
+  (% class="extradata-list server-list-row" %)##
+  |(% class="server-name" %)$escapetool.xml($obj.get('name'))##
+  |(% class="branches" %)PN: $pn, RM: $rm, PC: $pc##
+  |(% class="ip" %)$escapetool.xml($obj.get('ip'))##
+  |(% class="begin-time" %)$!{beginTime}##
+  |(% class="run-status $completedCSS" %)$obj.get('status')##
+  |(% class="action-delete" %){{html clean="false" wiki="false"}}&lt;span class="buttonwrapper"&gt;&lt;a class="button delete-server" href="$obj.get('name')"&gt;&lt;span class="fa fa-trash"&gt; &lt;/span&gt;&lt;span&gt;Delete&lt;/span&gt;&lt;/a&gt;&lt;/span&gt;{{/html}}
+#end
 {{/velocity}}</content>
   <object>
     <name>PhenomeCentral.PCTestDeplymentConfiguration</name>
@@ -155,11 +184,11 @@ var createCORSRequest = function(method, url) {
 };
 
 
-var generateBranchSelect = function (repo, json) {
+var generateBranchSelect = function (repo, jsonArray) {
     var repoLink = new Element('a', {'href': BASE_GITREPO_URL + repo, 'target': '_blank'}).update(repo);
     var selectDiv = new Element('div', {'class' : 'repo-select'}).insert(new Element('label', {'class' : 'repo-label'}).update(repoLink));
     var select = new Element('select', {'id': 'repo-select-' + repo});
-    json.each(function(branch) {
+    jsonArray.each(function(branch) {
         select.insert(new Element('option', {'value': branch.name}).update(branch.name));
     });
     selectDiv.insert(select);
@@ -174,7 +203,7 @@ var requestReposInfo = function () {
     // Response handlers
     xhr.onload = function() {
         var response = JSON.parse(xhr.responseText);
-        if (response) {
+        if (response &amp;&amp; Array.isArray(response)) {
             selects[repo] = generateBranchSelect(repo, response);
             requested++;
             if (requested == repos.length) {
@@ -193,12 +222,55 @@ var requestReposInfo = function () {
   });
 }
 
+var attachDeleteServerListeners  = function () {
+    $$('.delete-server').invoke('observe', 'click', function(clickEvent) {
+        clickEvent.stop();
+        var item = clickEvent.element();
+        var serverName = item.up('tr').down('.server-name').innerHTML;
+        item.blur();
+        if (item.disabled) {
+          // Do nothing if the button was already clicked and it's waiting for a response from the server.
+          return;
+        } else {
+            var url = new XWiki.Document('PCTestDeploymentService', 'PhenomeCentral').getURL('get');
+            new XWiki.widgets.ConfirmedAjaxRequest(
+                /* Ajax request URL */
+                url,
+                /* Ajax request parameters */
+                {
+                  parameters: {
+                    'action' : 'delete',
+                    'buildName' : serverName
+                  },
+                  method: "get",
+                  onCreate : function() {
+                      console.log('Sending');
+                  },
+                  onSuccess: function(response) {
+                      console.log('Success');
+                  },
+                  onComplete : function() {
+                      console.log('Complete');
+                  },
+                  onFailure : function() {
+                      console.log('Failed');
+                  }
+                },
+                /* Interaction parameters */
+                {
+                    confirmationText: "Are you sure that you want to delete instance " + serverName + "?"
+                }
+            );
+        }
+    });
+}
+
 var updateUI = function () {
     repos.each(function (repo) {
         container.insert(selects[repo]);
     });
 
-    var deployNameInput = new Element('input', {'class' : 'deploy-input', 'type' : 'text', 'id':'deploy-name'});
+    var deployNameInput = new Element('input', {'class' : 'deploy-input', 'type' : 'text', 'id' : 'deploy-name'});
     var deployNameDiv = new Element('div', {'class' : 'deploy-name'});
     deployNameDiv.insert(new Element('label', {'class' : 'deploy-name-label'}).update('Deploy build name:'));
     deployNameDiv.insert(deployNameInput);
@@ -210,28 +282,30 @@ var updateUI = function () {
     button.observe('click', function (event) {
         var url = new XWiki.Document('PCTestDeploymentService', 'PhenomeCentral').getURL('get');
         new Ajax.Request(url, {
-              parameters: {
+            parameters: {
                 'pnBrnachName' : $('repo-select-patient-network').value,
                 'rmBrnachName' : $('repo-select-remote-matching').value,
                 'pcBrnachName' : $('repo-select-phenomecentral.org').value,
                 'buildName' : $('deploy-name').value
-              },
-              method: "get",
-              onCreate : function() {
+            },
+            method: "get",
+            onCreate : function() {
                 console.log('Sending');
-              },
-              onSuccess: function(response) {
+            },
+            onSuccess: function(response) {
                 console.log('Success');
-              },
-              onComplete : function() {
+            },
+            onComplete : function() {
                 console.log('Complete');
-              }
             }
-        );
+        });
     });
 }
 
-requestReposInfo();</code>
+document.observe('xwiki:dom:loaded', function() {
+    requestReposInfo();
+    attachDeleteServerListeners();
+});</code>
     </property>
     <property>
       <name></name>
@@ -365,6 +439,9 @@ requestReposInfo();</code>
 }
 #deploy {
   margin: 1em;
+}
+.viewbody .server-list-row td {
+  text-align: left;
 }</code>
     </property>
     <property>
@@ -378,89 +455,6 @@ requestReposInfo();</code>
     </property>
     <property>
       <use>currentPage</use>
-    </property>
-  </object>
-  <object>
-    <name>PhenomeCentral.PCTestDeplymentConfiguration</name>
-    <number>0</number>
-    <className>XWiki.XWikiRights</className>
-    <guid>564211c2-bf21-4151-a34b-1477024f783d</guid>
-    <class>
-      <name>XWiki.XWikiRights</name>
-      <customClass/>
-      <customMapping/>
-      <defaultViewSheet/>
-      <defaultEditSheet/>
-      <defaultWeb/>
-      <nameField/>
-      <validationScript/>
-      <allow>
-        <defaultValue>1</defaultValue>
-        <disabled>0</disabled>
-        <displayFormType>select</displayFormType>
-        <displayType>allow</displayType>
-        <name>allow</name>
-        <number>4</number>
-        <prettyName>Allow/Deny</prettyName>
-        <unmodifiable>0</unmodifiable>
-        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
-      </allow>
-      <groups>
-        <cache>0</cache>
-        <disabled>0</disabled>
-        <displayType>input</displayType>
-        <multiSelect>1</multiSelect>
-        <name>groups</name>
-        <number>1</number>
-        <picker>1</picker>
-        <prettyName>Groups</prettyName>
-        <relationalStorage>0</relationalStorage>
-        <separator> </separator>
-        <size>5</size>
-        <unmodifiable>0</unmodifiable>
-        <classType>com.xpn.xwiki.objects.classes.GroupsClass</classType>
-      </groups>
-      <levels>
-        <cache>0</cache>
-        <disabled>0</disabled>
-        <displayType>select</displayType>
-        <multiSelect>1</multiSelect>
-        <name>levels</name>
-        <number>2</number>
-        <prettyName>Levels</prettyName>
-        <relationalStorage>0</relationalStorage>
-        <separator> </separator>
-        <size>3</size>
-        <unmodifiable>0</unmodifiable>
-        <classType>com.xpn.xwiki.objects.classes.LevelsClass</classType>
-      </levels>
-      <users>
-        <cache>0</cache>
-        <disabled>0</disabled>
-        <displayType>input</displayType>
-        <multiSelect>1</multiSelect>
-        <name>users</name>
-        <number>3</number>
-        <picker>1</picker>
-        <prettyName>Users</prettyName>
-        <relationalStorage>0</relationalStorage>
-        <separator> </separator>
-        <size>5</size>
-        <unmodifiable>0</unmodifiable>
-        <classType>com.xpn.xwiki.objects.classes.UsersClass</classType>
-      </users>
-    </class>
-    <property>
-      <allow>1</allow>
-    </property>
-    <property>
-      <groups>xwiki:XWiki.XWikiAdminGroup,</groups>
-    </property>
-    <property>
-      <levels>edit</levels>
-    </property>
-    <property>
-      <users/>
     </property>
   </object>
 </xwikidoc>

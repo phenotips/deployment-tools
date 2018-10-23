@@ -21,14 +21,16 @@ import org.xwiki.component.annotation.Component;
 import org.xwiki.script.service.ScriptService;
 import org.xwiki.stability.Unstable;
 
+import java.io.BufferedReader;
 import java.io.File;
-import java.nio.file.Paths;
+import java.io.FileReader;
 
 import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
 import org.apache.commons.lang3.StringUtils;
+import org.json.JSONArray;
 import org.slf4j.Logger;
 
 /**
@@ -46,9 +48,11 @@ public class PCTestDeploymentScriptService implements ScriptService
     @Inject
     private Logger logger;
 
-    private final String filePath =
-        Paths.get(System.getProperty("user.dir"), "webapps", "phenotips", "resources", "scripts",
-            "openstack_vm_deploy", "openstack_vm_deploy.py").toString();
+    /** Python script file. **/
+    private final String scriptFile = "openstack_vm_deploy.py";
+
+    /** Text file holding OpenStack running servers info JSON. **/
+    private final String serversFile = "server_list.txt";
 
     /**
      * Runs Python script with parameters.
@@ -63,13 +67,13 @@ public class PCTestDeploymentScriptService implements ScriptService
     public boolean runDeploymentScript(String pnBrnachName, String rmBrnachName, String pcBrnachName, String buildName)
     {
         try {
-            File f = new File(this.filePath);
+            File f = new File(this.scriptFile);
             if (!f.exists() || f.isDirectory()) {
-                this.logger.error("No such file {}", this.filePath);
+                this.logger.error("No such file {}", this.scriptFile);
                 return false;
             }
 
-            String command = "python " + this.filePath + " --start";
+            String command = "python " + this.scriptFile + " --start";
             if (pnBrnachName != null && StringUtils.isNotBlank(pnBrnachName)) {
                 command = command + " --pn " + pnBrnachName;
             }
@@ -95,29 +99,38 @@ public class PCTestDeploymentScriptService implements ScriptService
     }
 
     /**
-     * List OpenStack server instances in the json file.
+     * List OpenStack server instances in the JSON file.
      *
-     * @return true if the servers info was successfully fetched
+     * @return JSON string with servers info or empty string if fetching is unsuccessful.
      */
-    public boolean listServers()
+    public JSONArray listServers()
     {
         try {
-            File f = new File(this.filePath);
+            File f = new File(this.scriptFile);
             if (!f.exists() || f.isDirectory()) {
-                this.logger.error("No such file {}", this.filePath);
-                return false;
+                this.logger.error("No such file {}", this.scriptFile);
+                return null;
             }
 
-            String command = "python " + this.filePath + " --action list";
+            String command = "python " + this.scriptFile + " --action list";
             Process p = Runtime.getRuntime().exec(command);
             int retcode = p.waitFor();
             if (retcode == 0) {
-                return true;
+                String serversInfo = "";
+
+                BufferedReader in = new BufferedReader(new FileReader(this.serversFile));
+                String line;
+
+                while ((line = in.readLine()) != null) {
+                    serversInfo += line;
+                }
+
+                return new JSONArray(serversInfo);
             }
         } catch (Exception ex) {
             this.logger.error("OpenStack server instances : {}", ex);
         }
-        return false;
+        return null;
     }
 
     /**
@@ -129,13 +142,13 @@ public class PCTestDeploymentScriptService implements ScriptService
     public boolean deleteServer(String name)
     {
         try {
-            File f = new File(this.filePath);
+            File f = new File(this.scriptFile);
             if (!f.exists() || f.isDirectory()) {
-                this.logger.error("No such file {}", this.filePath);
+                this.logger.error("No such file {}", this.scriptFile);
                 return false;
             }
 
-            String command = "python " + this.filePath + " --delete";
+            String command = "python " + this.scriptFile + " --delete";
             if (name == null || StringUtils.isBlank(name)) {
                 return false;
             }

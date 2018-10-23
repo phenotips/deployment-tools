@@ -24,33 +24,36 @@ SERVER_LIST_FILE_NAME = "server_list.txt"
 def script(settings):
     # Initialize and turn on debug openstack logging
     openstack.enable_logging(debug=True)
+    logging.info("Initialize and turn on debug openstack logging")
 
     # Connection
     # https://docs.openstack.org/openstacksdk/latest/user/connection.html
     credentials = get_credentials()
+    logging.info("Got credentials {0}".format(credentials))
     # https://docs.openstack.org/openstacksdk/latest/user/guides/connect.html
     conn = openstack.connect(**credentials)
+    logging.info("Connected to OpenStack")
 
-    # If the servier with the same build name already exists - delete it
-    server = conn.compute.find_server(settings.build_name)
-
-    # Get server metadata
-    # server_metadata = conn.compute.get_server_metadata(server).metadata
     if settings.action == 'list':
         # openstack server list
         servers_list = conn.compute.servers()
+        logging.info(servers_list)
         data = []
         for server in servers_list:
             ipf = ''
+            logging.info(server)
             array_addresses = server.addresses
             if NETWORK_NAME not in array_addresses.keys():
                 continue
             for address in array_addresses[NETWORK_NAME]:
                 if address['OS-EXT-IPS:type'] == 'floating':
                     ipf = address['addr']
-            data.append({'name' : server.name, 'ip' : ipf, 'created' : server.created_at, 'status' : server.vm_state})
+            data.append({'id' : server.id, 'name' : server.name, 'ip' : ipf, 'created' : server.created_at, 'status' : server.vm_state, 'metadata' : server.metadata})
         print(data, file=open(SERVER_LIST_FILE_NAME, "w"))
-        exit()
+        sys.exit(0)
+
+    # If the servier with the same build name already exists - delete it
+    server = conn.compute.find_server(settings.build_name)
 
     if server:
         logging.info("Server for build %s exists" % settings.build_name)
@@ -61,7 +64,10 @@ def script(settings):
         logging.info("server %s deleted" % settings.build_name)
 
     if settings.action == 'delete':
-        exit()
+        sys.exit(0)
+
+    # Get server metadata
+    # server_metadata = conn.compute.get_server_metadata(server).metadata
 
     image = conn.compute.find_image(SNAPSHOT_NAME)
     flavor = conn.compute.find_flavor(FLAVOUR)

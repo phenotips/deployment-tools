@@ -180,7 +180,7 @@ def parse_args(args):
     from argparse import ArgumentParser
     parser = ArgumentParser()
     parser.add_argument("--git-dir", dest='git_dir',
-                      default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'GitGub'),
+                      default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'GitHub'),
                       help="path to the GitHub directory to clone repositories (by default the 'GitHub' folder in the directory from where the script runs)")
     parser.add_argument("--pn", dest='pn_branch_name',
                       default=meta['pn'],

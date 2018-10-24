@@ -24,10 +24,6 @@ DEFAULT_BRANCH_NAME = 'master'
 DEFAULT_BUILD_NAME = DEFAULT_BRANCH_NAME
 PC_GIT_REPOS = {'patient-network' : '', 'remote-matching' : '', 'phenomecentral.org' : ''}
 PARENT_PHENOTIPS_GIT_URL = 'https://github.com/phenotips/'
-CONSENT_URL = 'http://localhost:8080/rest/patients/{0}/consents/assign'
-PATIENTS_REST_URL = 'http://localhost:8080/rest/patients'
-CREDENTIALS = 'Admin:admin'
-REQUEST_HEADER = 'Content-Type: application/json'
 START_TIME = 0
 END_TIME = 0
 
@@ -47,7 +43,7 @@ def script(settings):
 def setup(settings):
     # define custom build name
     if settings.build_name == DEFAULT_BRANCH_NAME and (settings.pn_branch_name != DEFAULT_BRANCH_NAME or settings.rm_branch_name != DEFAULT_BRANCH_NAME or settings.pc_branch_name != DEFAULT_BRANCH_NAME):
-        settings.build_name = settings.pn_branch_name + settings.rm_branch_name + settings.pc_branch_name
+        settings.build_name = settings.pn_branch_name + '_' + settings.rm_branch_name + '_' + settings.pc_branch_name
 
     settings.pc_distrib_dir = os.path.join(settings.git_dir, 'phenomecentral.org', 'standalone', 'target')
 

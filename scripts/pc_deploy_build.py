@@ -31,10 +31,6 @@ import json
 DEFAULT_BRANCH_NAME = 'master'
 PC_GIT_REPOS = {'patient-network' : '', 'remote-matching' : '', 'phenomecentral.org' : ''}
 PARENT_PHENOTIPS_GIT_URL = 'https://github.com/phenotips/'
-CONSENT_URL = 'http://localhost:8080/rest/patients/{0}/consents/assign'
-PATIENTS_REST_URL = 'http://localhost:8080/rest/patients'
-CREDENTIALS = 'Admin:admin'
-REQUEST_HEADER = 'Content-Type: application/json'
 START_TIME = 0
 END_TIME = 0
 
@@ -51,13 +47,10 @@ def script(settings):
         # Start PhenomeCentral instance
         start_pc(settings)
 
-        # load running instance with test data - patient records
-        load_data()
-
 def setup(settings):
     # define custom build name
     if settings.build_name == DEFAULT_BRANCH_NAME and (settings.pn_branch_name != DEFAULT_BRANCH_NAME or settings.rm_branch_name != DEFAULT_BRANCH_NAME or settings.pc_branch_name != DEFAULT_BRANCH_NAME):
-        settings.build_name = settings.pn_branch_name + settings.rm_branch_name + settings.pc_branch_name
+        settings.build_name = settings.pn_branch_name + '_' + settings.rm_branch_name + '_' + settings.pc_branch_name
 
     settings.pc_distrib_dir = os.path.join(settings.git_dir, 'phenomecentral.org', 'standalone', 'target')
 
@@ -131,31 +124,6 @@ def start_pc(settings):
     command = ['curl', 'http://localhost:8080']
     retcode = subprocess.call(command)
     time.sleep(90)
-
-def load_data():
-    # push patient
-    logging.info('Loading patients to PhenomeCentral instance ...')
-
-    data = '{"clinicalStatus":"affected","genes":[{"gene":"T","id":"ENSG00000164458","status":"candidate"}],"features":[{"id":"HP:0001363","label":"Craniosynostosis","type":"phenotype","observed":"yes"},{"id":"HP:0004325","label":"Decreased body weight","type":"phenotype","observed":"yes"}]}'
-    command = ['curl', '-u', CREDENTIALS, '-H', REQUEST_HEADER, '-X', 'POST', '-d', data, PATIENTS_REST_URL]
-    retcode = subprocess.call(command)
-    if retcode != 0:
-        logging.error('Error: Attempt to import patient failed')
-
-    # grant all consents
-    data = '["real", "genetic", "share_history", "share_images", "matching"]'
-    command = ['curl', '-u', CREDENTIALS, '-H', REQUEST_HEADER, '-X', 'PUT', '-d', data, CONSENT_URL.format('P0000001')]
-    retcode = subprocess.call(command)
-    if retcode != 0:
-        logging.error('Error: Attempt to grant patient all consents failed')
-    logging.info('->Finished loading patients to PhenomeCentral instance.')
-
-    # TODO: load: families, groups, studies, users
-    #       add configurations: remote servers
-
-    END_TIME = time.ctime()
-    total_time_sec = END_TIME - START_TIME
-    logging.info('TOTAL TIME : {0}, start time {1}, end time {2}'.format(total_time_sec, START_TIME, END_TIME))
 
 def parse_args(args):
     meta = {'pn' : DEFAULT_BRANCH_NAME, 'rm' : DEFAULT_BRANCH_NAME, 'pc' : DEFAULT_BRANCH_NAME, 'bn' : DEFAULT_BRANCH_NAME}

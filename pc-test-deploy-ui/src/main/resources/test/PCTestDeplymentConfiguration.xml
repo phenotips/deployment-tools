@@ -62,17 +62,19 @@ Please, select branches for the following GitHub repositories for a PhenomeCentr
 ## TABLE BODY
 #set ($serverList = $services.pcTestDeployment.listServers())
 #foreach ($obj in $serverList)
-  #set($beginTime = $obj.get('created').replace('T',' ').replace('Z',''))
+  #set($beginTime = $obj.get('created').replace('T','').replace('Z',''))
   #set($pn = $obj.get('metadata').optString('pn'))
   #set($rm = $obj.get('metadata').optString('rm'))
   #set($pc = $obj.get('metadata').optString('pc'))
   (% class="extradata-list server-list-row" %)##
   |(% class="server-name" %)$escapetool.xml($obj.get('name'))##
-  |(% class="branches" %)PN: $pn, RM: $rm, PC: $pc##
-  |(% class="ip" %)$escapetool.xml($obj.get('ip'))##
+  |(% class="branches" %){{html clean="false"}}#if("${pn}" != "")PN: &lt;span class="code"&gt;$pn&lt;/span&gt;#end##
+                                               #if("${rm}" != ""), RM: &lt;span class="code"&gt;$rm&lt;/span&gt;#end##
+                                               #if("${pc}" != ""), PC: &lt;span class="code"&gt;$pc&lt;/span&gt;#end{{/html}}##
+  |(% class="ip" %){{html clean="false"}}&lt;a href="https://$escapetool.xml($obj.get('ip')):8080" target="_blank"&gt;$escapetool.xml($obj.get('ip'))&lt;/a&gt;{{/html}}##
   |(% class="begin-time" %)$!{beginTime}##
   |(% class="run-status $completedCSS" %)$obj.get('status')##
-  |(% class="action-delete" %){{html clean="false" wiki="false"}}&lt;span class="buttonwrapper"&gt;&lt;a class="button delete-server" href="$obj.get('name')"&gt;&lt;span class="fa fa-trash"&gt; &lt;/span&gt;&lt;span&gt;Delete&lt;/span&gt;&lt;/a&gt;&lt;/span&gt;{{/html}}
+  |(% class="action-delete" %){{html clean="false"}}&lt;span class="buttonwrapper"&gt;&lt;a class="button delete-server" href="$obj.get('name')"&gt;&lt;span class="fa fa-trash"&gt; &lt;/span&gt;&lt;span&gt;Delete&lt;/span&gt;&lt;/a&gt;&lt;/span&gt;{{/html}}
 #end
 {{/velocity}}</content>
   <object>
@@ -258,7 +260,7 @@ var attachDeleteServerListeners  = function () {
                 },
                 /* Interaction parameters */
                 {
-                    confirmationText: "Are you sure that you want to delete instance " + serverName + "?"
+                    confirmationText: 'Are you sure that you want to delete instance &lt;span class="code"&gt;' + serverName + '&lt;/span&gt;?'
                 }
             );
         }
@@ -442,6 +444,18 @@ document.observe('xwiki:dom:loaded', function() {
 }
 .viewbody .server-list-row td {
   text-align: left;
+  line-height: 2em;
+}
+.code {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  background-color: rgba(27,31,35,0.05);
+  border-radius: 3px;
+  font-family: "SFMono-Regular",Consolas,"Liberation Mono",Menlo,Courier,monospace;
+}
+.question .code {
+  line-height: 4em;
 }</code>
     </property>
     <property>

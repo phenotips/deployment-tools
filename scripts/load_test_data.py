@@ -4,8 +4,9 @@
 Loads test patient data to the running PhenomeCentral instance.
 - Loads patient data and updates patient consents from JSON via PhenoTips patient REST services.
 - Loads families, groups, studies, users, and configurations like remote server config from XAR file via platform-core XWiki XAR upload and import services:
-https://github.com/xwiki/xwiki-platform/blob/6bc521593a1e41f69f9a20d03ffe8b7b979f7b59/xwiki-platform-core/xwiki-platform-web/src/main/webapp/resources/uicomponents/widgets/upload.js#L229
-https://github.com/xwiki/xwiki-platform/blob/6bc521593a1e41f69f9a20d03ffe8b7b979f7b59/xwiki-platform-core/xwiki-platform-web/src/main/webapp/resources/js/xwiki/importer/import.js#L389
+    https://github.com/xwiki/xwiki-platform/blob/6bc521593a1e41f69f9a20d03ffe8b7b979f7b59/xwiki-platform-core/xwiki-platform-web/src/main/webapp/resources/uicomponents/widgets/upload.js#L229
+    https://github.com/xwiki/xwiki-platform/blob/6bc521593a1e41f69f9a20d03ffe8b7b979f7b59/xwiki-platform-core/xwiki-platform-web/src/main/webapp/resources/js/xwiki/importer/import.js#L389
+- Copies sample processed VCF files "exomiser" folder to "/data" installation directory
 """
 
 from __future__ import with_statement
@@ -29,20 +30,43 @@ PATIENTS_REST_URL = 'http://localhost:8080/rest/patients'
 CREDENTIALS = 'Admin:admin'
 XAR_UPLOAD_URL = 'http://localhost:8080/upload/XWiki/XWikiPreferences'
 XAR_IMPORT_URL = 'http://localhost:8080/import/XWiki/XWikiPreferences?'
+DATA_XAR_FILENAME = 'pc-data.xar'
+PROCESSED_EXOMISER_FILES_SRC_PATH = "exomiser"
+PROCESSED_EXOMISER_FILES_DEST_PATH = "c:/Users/Veronika/Desktop/deploy/PN-336mastermaster/phenomecentral-standalone-1.2-SNAPSHOT/data/exomiser"
+
 
 def script(settings):
     # authorise
     session = get_session()
 
-    # push patient
-    # load_patients(session)
+    # load patient data with consents via REST service
+    load_patients(session)
 
-    # load users
-    file = 'phenotips-user-profile-ui.xar'
-    upload_xar(session, file)
+    # load and, if upload is successful, import XAR file to the running instance
+    upload_xar(session, DATA_XAR_FILENAME)
 
-    # TODO: load: families, groups, studies, users
-    #       add configurations: remote server
+    # Copy sample of processed VCF file to "data" installation directory
+    copy_processed_VCFs()
+
+
+def copy_processed_VCFs():
+    src = os.path.abspath(PROCESSED_EXOMISER_FILES_SRC_PATH)
+    dest = os.path.abspath(PROCESSED_EXOMISER_FILES_DEST_PAT)
+    logging.info('Copyting exomiser processed VCF files to {0} :'.format(dest))
+    if os.path.exists(dest):
+        logging.error('exomiser directory alredy exists, deleting it.')
+        shutil.rmtree(dest)
+    import errno
+    import shutil
+    try:
+        shutil.copytree(src, dest)
+    except OSError as e:
+        # If the error was caused because the source wasn't a directory, copy as a file
+        if e.errno == errno.ENOTDIR:
+            shutil.copy(src, dest)
+        else:
+            print('Exomiser directory not copied. Error: %s' % e)
+
 
 def get_session():
     session = Session()
@@ -54,6 +78,7 @@ def get_session():
             })
     session.head('http://localhost:8080')
     return session
+
 
 def load_patients(session):
     logging.info('Loading patients to PhenomeCentral instance ...')
@@ -72,19 +97,22 @@ def load_patients(session):
     headers = {'Content-Type': 'application/json'}
     req = session.post(PATIENTS_REST_URL, data=json.dumps(payload), headers=headers)
     if req.status_code in [200, 201]:
-        logging.info('Loaded patient data')
+        logging.info('Loaded patient data for patient')
+        grant_consents(session, consents)
     else:
         logging.error('Error: Attempt to load patient failed {0}'.format(req.status_code))
 
-    # grant consents
+
+def grant_consents(session, consents)
     consents = ["real", "genetic", "share_history", "share_images", "matching"]
-    req = session.put(CONSENT_URL.format('P0000009'), data=json.dumps(consents), headers=headers)
+    req = session.put(CONSENT_URL.format('P0000001'), data=json.dumps(consents), headers=headers)
     if req.status_code in [200, 201]:
         logging.info('Granted patient all consents')
     else:
         logging.error('Error: Attempt to grant patient all consents failed {0}'.format(req.status_code))
 
     logging.info('->Finished loading patients to PhenomeCentral instance.')
+
 
 def upload_xar(session, filename):
     logging.info('Loading XAR to PhenomeCentral instance ...')
@@ -116,6 +144,7 @@ def upload_xar(session, filename):
     else:
         logging.error('Unexpected response ({0}) from uploading XAR file {1}'.format(req.status_code, filename))
 
+
 def import_xar_files(session, filename):
     logging.info('Importing XAR files to PhenomeCentral instance ...')
 
@@ -143,6 +172,7 @@ def import_xar_files(session, filename):
     else:
         logging.error('Error: Importing XAR files failed {0}'.format(req.status_code))
     logging.info(d.decode('utf-8'))
+
 
 def parse_args(args):
     parser = ArgumentParser()

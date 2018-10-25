@@ -1,7 +1,9 @@
 #!/usr/bin/env python3.6
 
 """
-Loads test patient data to the running PhenomeCentral instance
+Loads test patient data to the running PhenomeCentral instance.
+- Loads patient data and updates patient consents from JSON via PhenoTips patient REST services.
+- Loads families, groups, studies, users, and configurations like remote server config from XAR file via platform-core XWiki XAR upload and import services:
 https://github.com/xwiki/xwiki-platform/blob/6bc521593a1e41f69f9a20d03ffe8b7b979f7b59/xwiki-platform-core/xwiki-platform-web/src/main/webapp/resources/uicomponents/widgets/upload.js#L229
 https://github.com/xwiki/xwiki-platform/blob/6bc521593a1e41f69f9a20d03ffe8b7b979f7b59/xwiki-platform-core/xwiki-platform-web/src/main/webapp/resources/js/xwiki/importer/import.js#L389
 """
@@ -14,11 +16,11 @@ import subprocess
 import logging
 import json
 import re
-
-from base64 import b64encode
-from urllib.parse import urlencode
-from requests import Session
 import requests
+
+from argparse import ArgumentParser
+from base64 import b64encode
+from requests import Session
 from requests_toolbelt.utils import dump
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 
@@ -26,7 +28,7 @@ CONSENT_URL = 'http://localhost:8080/rest/patients/{0}/consents/assign'
 PATIENTS_REST_URL = 'http://localhost:8080/rest/patients'
 CREDENTIALS = 'Admin:admin'
 XAR_UPLOAD_URL = 'http://localhost:8080/upload/XWiki/XWikiPreferences'
-XAR_IMPORT_URL = 'http://localhost:8080/import/XWiki/XWikiPreferences?editor=globaladmin&section=Import'
+XAR_IMPORT_URL = 'http://localhost:8080/import/XWiki/XWikiPreferences?'
 
 def script(settings):
     # authorise
@@ -38,7 +40,6 @@ def script(settings):
     # load users
     file = 'phenotips-user-profile-ui.xar'
     upload_xar(session, file)
-    #import_xar_files(session, file)
 
     # TODO: load: families, groups, studies, users
     #       add configurations: remote server
@@ -96,57 +97,58 @@ def upload_xar(session, filename):
         return
     logging.info("Form token: {0}".format(form_token_match.group(1)))
 
+    # Prepare XAR payload for upload
     filebase = os.path.basename(filename)
-
     m_enc = MultipartEncoder( fields={
             'filepath': (filebase, open(filebase, 'rb')),
             'xredirect': '/import/XWiki/XWikiPreferences?editor=globaladmin&section=Import',
             'form_token': form_token_match.group(1)} )
 
     req = session.post(XAR_UPLOAD_URL, data=m_enc, headers={'Content-Type': m_enc.content_type}, allow_redirects=False)
-                  
-    print("REQ headers: ", req.request.headers)
-    print("REQ body:", req.request.body)
-    print("REPLY STATUS: ", req.status_code)
+
+    #print("REQ headers: ", req.request.headers)
+    #print("REQ body:", req.request.body)
+    #print("REPLY STATUS: ", req.status_code)
 
     if req.status_code in [200, 201, 302]:
         logging.info('Uploaded xar file: {0}'.format(filename))
+        import_xar_files(session, filename)
     else:
         logging.error('Unexpected response ({0}) from uploading XAR file {1}'.format(req.status_code, filename))
 
 def import_xar_files(session, filename):
     logging.info('Importing XAR files to PhenomeCentral instance ...')
 
-    payload = {
-        'action': 'import',
-        'name': filename,
-        'historyStrategy': 'add',
-        'importAsBackup': 'false',
-        'ajax': '1',
-        'pages': ['XWiki.AdminUserProfileSheet:',
-            'XWiki.UserProfileSectionClass:',
-            'XWiki.UserProfileSectionsClass:',
-            'XWiki.XWikiUserPreferencesSheet:',
-            'XWiki.XWikiUserProfileSheet:',
-            'XWiki.XWikiUserSheet:'
-            ]
-        }
+    payload = 'editor=globaladmin&section=Import&action=import&name=' + filename + '&historyStrategy=replace&importAsBackup=false&ajax=1'
+
+    # Parse XAR file, loop through list of its files and form a payload string
+    # payload shold be formed manualy because it should contain repetitive "pages="
+    zip=zipfile.ZipFile(filename)
+    filenames = zip.namelist()
+    for file in filenames:
+        if file == 'package.xml':
+            continue
+        name_match = re.search('XWiki/(.*).xml', file)
+        if not name_match:
+            continue
+        name = name_match.group(1) + ':'
+        payload = payload + '&language_' + name + '=&pages=' + name
 
     headers = {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'}
-    req = session.post(XAR_IMPORT_URL, data=json.dumps(payload), headers=headers)
+
+    req = session.post(XAR_IMPORT_URL + payload, headers=headers)
+    d = dump.dump_all(req)
     if req.status_code in [200, 201]:
         logging.info('Imported XAR files')
     else:
         logging.error('Error: Importing XAR files failed {0}'.format(req.status_code))
-
+    logging.info(d.decode('utf-8'))
 
 def parse_args(args):
-    from argparse import ArgumentParser
     parser = ArgumentParser()
     parser.add_argument("--vcf", dest='load_vcf',
                       action="store_true",
                       help="loads processed vcf files to patients if set, default false")
-
     args = parser.parse_args()
     return args
 

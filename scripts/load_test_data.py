@@ -6,7 +6,7 @@ Loads test patient data to the running PhenomeCentral instance.
 - Loads families, groups, studies, users, and configurations like remote server config from XAR file via platform-core XWiki XAR upload and import services:
     https://github.com/xwiki/xwiki-platform/blob/6bc521593a1e41f69f9a20d03ffe8b7b979f7b59/xwiki-platform-core/xwiki-platform-web/src/main/webapp/resources/uicomponents/widgets/upload.js#L229
     https://github.com/xwiki/xwiki-platform/blob/6bc521593a1e41f69f9a20d03ffe8b7b979f7b59/xwiki-platform-core/xwiki-platform-web/src/main/webapp/resources/js/xwiki/importer/import.js#L389
-- Copies sample processed VCF files "exomiser" folder to "/data" installation directory
+- Copies sample processed VCF files "exomiser" folder to "/data" installation directory.
 """
 
 from __future__ import with_statement
@@ -32,7 +32,7 @@ XAR_UPLOAD_URL = 'http://localhost:8080/upload/XWiki/XWikiPreferences'
 XAR_IMPORT_URL = 'http://localhost:8080/import/XWiki/XWikiPreferences?'
 DATA_XAR_FILENAME = 'pc-data.xar'
 PROCESSED_EXOMISER_FILES_SRC_PATH = "exomiser"
-PROCESSED_EXOMISER_FILES_DEST_PATH = "c:/Users/Veronika/Desktop/deploy/PN-336mastermaster/phenomecentral-standalone-1.2-SNAPSHOT/data/exomiser"
+PROCESSED_EXOMISER_FILES_DEST_PATH = "/home/pcinstall/phenomecentral-standalone-1.2-SNAPSHOT/data/exomiser"
 
 
 def script(settings):
@@ -45,8 +45,9 @@ def script(settings):
     # load and, if upload is successful, import XAR file to the running instance
     upload_xar(session, DATA_XAR_FILENAME)
 
-    # Copy sample of processed VCF file to "data" installation directory
-    copy_processed_VCFs()
+    # Copy sample of processed VCF file to "/data" installation directory
+    if copy_vcf:
+        copy_processed_VCFs()
 
 
 def copy_processed_VCFs():
@@ -176,9 +177,9 @@ def import_xar_files(session, filename):
 
 def parse_args(args):
     parser = ArgumentParser()
-    parser.add_argument("--vcf", dest='load_vcf',
+    parser.add_argument("--vcf", dest='copy_vcf',
                       action="store_true",
-                      help="loads processed vcf files to patients if set, default false")
+                      help="copies processed vcf files to patients data if set, default false")
     args = parser.parse_args()
     return args
 

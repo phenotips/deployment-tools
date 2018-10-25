@@ -45,6 +45,14 @@ import org.slf4j.Logger;
 @Singleton
 public class PCTestDeploymentScriptService implements ScriptService
 {
+    private static final boolean IS_WINDOWS = (System.getProperty("os.name").toLowerCase().indexOf("win") >= 0);
+
+    // In Windows it is easier to manually specify the interpreter for the script
+    //
+    // Linux can run python scripts directly using a header like "#!/usr/bin/env python3.6". At the same time in Linux
+    // it is harder to know the exact interpreter to be used, e.g. "python", "python3.6", or something else.
+    private static final String EXECUTION_PREFIX = IS_WINDOWS ? "python " : "./";
+
     @Inject
     private Logger logger;
 
@@ -67,31 +75,25 @@ public class PCTestDeploymentScriptService implements ScriptService
     public boolean runDeploymentScript(String pnBrnachName, String rmBrnachName, String pcBrnachName, String buildName)
     {
         try {
-            File f = new File(this.scriptFile);
-            if (!f.exists() || f.isDirectory()) {
-                this.logger.error("No such file {}", this.scriptFile);
-                return false;
-            }
+            this.logger.error("Running deployment script for branches PN[{}], RM[{}], PC[{}]",
+                pnBrnachName, rmBrnachName, pcBrnachName);
 
-            String command = "python " + this.scriptFile + " --start";
+            String scriptArguments = " --start";
             if (pnBrnachName != null && StringUtils.isNotBlank(pnBrnachName)) {
-                command = command + " --pn " + pnBrnachName;
+                scriptArguments = scriptArguments + " --pn " + pnBrnachName;
             }
             if (rmBrnachName != null && StringUtils.isNotBlank(rmBrnachName)) {
-                command = command + " --rm " + rmBrnachName;
+                scriptArguments = scriptArguments + " --rm " + rmBrnachName;
             }
             if (pcBrnachName != null && StringUtils.isNotBlank(pcBrnachName)) {
-                command = command + " --pc " + pcBrnachName;
+                scriptArguments = scriptArguments + " --pc " + pcBrnachName;
             }
             if (buildName != null && StringUtils.isNotBlank(buildName)) {
-                command = command + " --build_name " + buildName;
+                scriptArguments = scriptArguments + " --build_name " + buildName;
             }
 
-            Process p = Runtime.getRuntime().exec(command);
-            int retcode = p.waitFor();
-            if (retcode == 0) {
-                return true;
-            }
+            // execute the script, expected return code is 0
+            return executeScript(scriptArguments, 0);
         } catch (Exception ex) {
             this.logger.error("Error executing deployment script: {}", ex);
         }
@@ -101,26 +103,23 @@ public class PCTestDeploymentScriptService implements ScriptService
     /**
      * List OpenStack server instances in the JSON file.
      *
-     * @return JSON string with servers info or empty string if fetching is unsuccessful.
+     * @return JSON array with server info or null if fetching is unsuccessful.
      */
     public JSONArray listServers()
     {
         try {
-            File f = new File(this.scriptFile);
-            if (!f.exists() || f.isDirectory()) {
-                this.logger.error("No such file {}", this.scriptFile);
-                return null;
-            }
+            this.logger.error("Getting the list of already running VMs");
 
-            String command = "python " + this.scriptFile + " --action list";
-            Process p = Runtime.getRuntime().exec(command);
-            int retcode = p.waitFor();
-            if (retcode == 0) {
+            String scriptArguments = " --action list";
+
+            // execute the script, expected return code is 0
+            if (executeScript(scriptArguments, 0)) {
+                this.logger.error("- attempting to parse server list file [{}]", this.serversFile);
+
                 String serversInfo = "";
-
                 BufferedReader in = new BufferedReader(new FileReader(this.serversFile));
-                String line;
 
+                String line;
                 while ((line = in.readLine()) != null) {
                     serversInfo += line;
                 }
@@ -128,7 +127,7 @@ public class PCTestDeploymentScriptService implements ScriptService
                 return new JSONArray(serversInfo);
             }
         } catch (Exception ex) {
-            this.logger.error("OpenStack server instances : {}", ex);
+            this.logger.error("Error executing server list script: {}", ex);
         }
         return null;
     }
@@ -136,32 +135,56 @@ public class PCTestDeploymentScriptService implements ScriptService
     /**
      * Delete OpenStack server instance specified by name.
      *
-     * @param name name of the server to delete
+     * @param buildName name of the server to delete
      * @return true if the servers was successfully deleted
      */
-    public boolean deleteServer(String name)
+    public boolean deleteServer(String buildName)
     {
         try {
+            this.logger.error("Removing existing VM for build [{}]", buildName);
+
+            if (buildName == null || StringUtils.isBlank(buildName)) {
+                return false;
+            }
+
+            String scriptArguments = " --delete --build_name " + buildName;
+
+            // execute the script, expected return code is 0
+            return executeScript(scriptArguments, 0);
+        } catch (Exception ex) {
+            this.logger.error("Error removing VM for build [{}] : {}", buildName, ex);
+        }
+        return false;
+    }
+
+    private boolean executeScript(String scriptArguments, int expectedReturnCode) throws Exception
+    {
+        try {
+            this.logger.error("Script arguments to be used: [{}]", scriptArguments);
+            this.logger.error("- expected script location: [{}]", System.getProperty("user.dir"));
+            this.logger.error("- expected script filename: [{}]", this.scriptFile);
+
             File f = new File(this.scriptFile);
             if (!f.exists() || f.isDirectory()) {
-                this.logger.error("No such file {}", this.scriptFile);
+                this.logger.error("Script file [{}] not found", this.scriptFile);
                 return false;
             }
 
-            String command = "python " + this.scriptFile + " --delete";
-            if (name == null || StringUtils.isBlank(name)) {
-                return false;
-            }
+            String fullCommand = this.EXECUTION_PREFIX + this.scriptFile + scriptArguments;
+            this.logger.error("- full command to be executed: [{}]", fullCommand);
 
-            command = command + " --build_name " + name;
-            Process p = Runtime.getRuntime().exec(command);
+            Process p = Runtime.getRuntime().exec(fullCommand);
             int retcode = p.waitFor();
-            if (retcode == 0) {
+            this.logger.error("Execution finished with return code {}", retcode);
+
+            if (retcode == expectedReturnCode) {
                 return true;
             }
         } catch (Exception ex) {
-            this.logger.error("OpenStack server instances : {}", ex);
+            this.logger.error("Error executing deployment script");
+            throw ex;
         }
         return false;
     }
 }
+

@@ -33,6 +33,7 @@ XAR_IMPORT_URL = 'http://localhost:8080/import/XWiki/XWikiPreferences?'
 DATA_XAR_FILENAME = 'pc-data.xar'
 PROCESSED_EXOMISER_FILES_SRC_PATH = "exomiser"
 PROCESSED_EXOMISER_FILES_DEST_PATH = "/home/pcinstall/phenomecentral-standalone-1.2-SNAPSHOT/data/exomiser"
+XAR_FILE_NAMES = ['Families.FAM0000001', 'Families.FAM0000002', 'Families.FAM0000003', 'Groups.UDN', 'Groups.UDN Managers', 'XWiki.John', 'XWiki.Julia', 'XWiki.Mary', 'XWiki.Pat', 'XWiki.Peter', 'data.P0000001', 'data.P0000002', 'data.P0000003', 'data.P0000004', 'data.P0000005', 'data.P0000006', 'data.P0000007', 'data.P0000008', 'data.P0000009', 'data.P0000010', 'data.P0000011', 'data.P0000012', 'data.P0000013', 'data.P0000014', 'data.P0000015', 'data.P0000016', 'data.P0000017', 'data.P0000018']
 
 
 def script(settings):
@@ -46,7 +47,7 @@ def script(settings):
     upload_xar(session, DATA_XAR_FILENAME)
 
     # Copy sample of processed VCF file to "/data" installation directory
-    if copy_vcf:
+    if settings.copy_vcf:
         copy_processed_VCFs()
 
 
@@ -99,13 +100,14 @@ def load_patients(session):
     req = session.post(PATIENTS_REST_URL, data=json.dumps(payload), headers=headers)
     if req.status_code in [200, 201]:
         logging.info('Loaded patient data for patient')
+        consents = ["real", "genetic", "share_history", "share_images", "matching"]
         grant_consents(session, consents)
     else:
         logging.error('Error: Attempt to load patient failed {0}'.format(req.status_code))
 
 
-def grant_consents(session, consents)
-    consents = ["real", "genetic", "share_history", "share_images", "matching"]
+def grant_consents(session, consents):
+    headers = {'Content-Type': 'application/json'}
     req = session.put(CONSENT_URL.format('P0000001'), data=json.dumps(consents), headers=headers)
     if req.status_code in [200, 201]:
         logging.info('Granted patient all consents')
@@ -151,28 +153,18 @@ def import_xar_files(session, filename):
 
     payload = 'editor=globaladmin&section=Import&action=import&name=' + filename + '&historyStrategy=replace&importAsBackup=false&ajax=1'
 
-    # Parse XAR file, loop through list of its files and form a payload string
-    # payload shold be formed manualy because it should contain repetitive "pages="
-    zip=zipfile.ZipFile(filename)
-    filenames = zip.namelist()
-    for file in filenames:
-        if file == 'package.xml':
-            continue
-        name_match = re.search('XWiki/(.*).xml', file)
-        if not name_match:
-            continue
-        name = name_match.group(1) + ':'
+    for file in XAR_FILE_NAMES:
+        name = file  + ':'
         payload = payload + '&language_' + name + '=&pages=' + name
 
     headers = {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'}
-
     req = session.post(XAR_IMPORT_URL + payload, headers=headers)
     d = dump.dump_all(req)
     if req.status_code in [200, 201]:
         logging.info('Imported XAR files')
     else:
         logging.error('Error: Importing XAR files failed {0}'.format(req.status_code))
-    logging.info(d.decode('utf-8'))
+    # logging.info(d.decode('utf-8'))
 
 
 def parse_args(args):

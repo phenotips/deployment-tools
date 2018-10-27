@@ -15,6 +15,7 @@ import shutil
 import time
 import json
 import platform
+import traceback
 from git import Repo
 from argparse import ArgumentParser
 from argparse import RawTextHelpFormatter
@@ -224,6 +225,11 @@ def main(args=sys.argv[1:]):
     if settings.start_after_deploy:
         start_pc(settings)
 
+
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception:
+      logging.error('Exception: [{0}]'.format(traceback.format_exc()))
+
 

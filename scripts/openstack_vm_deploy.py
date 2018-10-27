@@ -10,6 +10,8 @@ import os
 import logging
 import openstack
 import subprocess
+import traceback
+#from openstack.cloud import exc
 
 #####################################################
 # OpenStack parameters
@@ -43,7 +45,7 @@ def script(settings):
     if settings.action == 'list':
         # openstack server list
         servers_list = conn.compute.servers()
-        logging.info(servers_list)
+        logging.info("List: {0}".format(servers_list))
         data = []
         for server in servers_list:
             ipf = ''
@@ -88,7 +90,7 @@ def script(settings):
     metadatau['bn'] = settings.build_name
 
     logging.info("Creating a new VM..........")
-    from openstack.cloud import exc
+
     try:
         server = conn.compute.create_server(
             name=settings.build_name, image_id=image.id, flavor_id=flavor.id,
@@ -98,19 +100,21 @@ def script(settings):
         # interval – Number of seconds to wait before to consecutive checks. Default to 2.
         # wait – Maximum number of seconds to wait before the change. Default to 120.
         server = conn.compute.wait_for_server(server, interval=30, wait=240)
-    except (exc.OpenStackCloudTimeout, TimeoutException):
+    except:
         server = conn.compute.find_server(settings.build_name)
         logging.info("--STATUS---> {0}".format(server.status))
+        sys.exit(-3)
 
     #print("ssh -i {key} root@{ip}".format(key=PRIVATE_KEYPAIR_FILE, ip=server.access_ipv4))
 
     # openstack server add floating ip [build_name] [ip]
-    logging.info("--ASSOCIATE FLOATING IP-->")
+    logging.info("Assigning floating IPs..........")
     fip = get_floating_ip(conn)
     #server.add_floating_ip(address=fip.floating_ip_address)
     retcode = subprocess.call(['openstack', 'server', 'add', 'floating', 'ip', settings.build_name, fip.floating_ip_address])
     if retcode != 0:
         logging.error('Error: assiging floating_ip_address {0} failed'.format(fip.floating_ip_address))
+        sys.exit(-4)
     else:
         logging.info("-- FLOATING IP ASSOCIATED --> {0}".format(fip))
 
@@ -128,6 +132,9 @@ def get_floating_ip(conn):
 
 # get credentials from Environment Variables set by running HSC_CCM_PhenoTips-openrc.sh
 def get_credentials():
+    logging.info("Environment variables: username: [{0}]".format(os.environ['OS_USERNAME']))
+    logging.info("Environment variables: URL: [{0}]".format(os.environ['OS_AUTH_URL']))
+
     d = {}
     d['version'] = os.environ['OS_IDENTITY_API_VERSION']
     d['username'] = os.environ['OS_USERNAME']
@@ -185,7 +192,11 @@ def main(args=sys.argv[1:]):
 
     logging.info('Started deployment with arguments: [' + ' '.join(sys.argv[1:]) + ']')
 
-    script(settings)
+    try:
+        script(settings)
+    except Exception:
+        logging.error('Exception: [{0}]'.format(traceback.format_exc()))
+        sys.exit(-1)
 
 if __name__ == '__main__':
     sys.exit(main())

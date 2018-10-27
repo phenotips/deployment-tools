@@ -23,6 +23,7 @@ import org.xwiki.stability.Unstable;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 
 import javax.inject.Inject;
@@ -78,7 +79,7 @@ public class PCTestDeploymentScriptService implements ScriptService
             this.logger.error("Running deployment script for branches PN[{}], RM[{}], PC[{}]",
                 pnBrnachName, rmBrnachName, pcBrnachName);
 
-            String scriptArguments = " --start";
+            String scriptArguments = " --action deploy";
             if (pnBrnachName != null && StringUtils.isNotBlank(pnBrnachName)) {
                 scriptArguments = scriptArguments + " --pn " + pnBrnachName;
             }
@@ -89,7 +90,7 @@ public class PCTestDeploymentScriptService implements ScriptService
                 scriptArguments = scriptArguments + " --pc " + pcBrnachName;
             }
             if (buildName != null && StringUtils.isNotBlank(buildName)) {
-                scriptArguments = scriptArguments + " --build_name " + buildName;
+                scriptArguments = scriptArguments + " --build-name " + buildName;
             }
 
             // execute the script, expected return code is 0
@@ -114,7 +115,7 @@ public class PCTestDeploymentScriptService implements ScriptService
 
             // execute the script, expected return code is 0
             if (executeScript(scriptArguments, 0)) {
-                this.logger.error("- attempting to parse server list file [{}]", this.serversFile);
+                this.logger.error("* attempting to parse server list file [{}]", this.serversFile);
 
                 String serversInfo = "";
                 BufferedReader in = new BufferedReader(new FileReader(this.serversFile));
@@ -126,6 +127,9 @@ public class PCTestDeploymentScriptService implements ScriptService
 
                 return new JSONArray(serversInfo);
             }
+        } catch (FileNotFoundException ex) {
+            this.logger.error("Error: script did not generate serverlist file [{}] or the file could not be found",
+                this.serversFile);
         } catch (Exception ex) {
             this.logger.error("Error executing server list script: {}", ex);
         }
@@ -147,7 +151,7 @@ public class PCTestDeploymentScriptService implements ScriptService
                 return false;
             }
 
-            String scriptArguments = " --delete --build_name " + buildName;
+            String scriptArguments = " --action delete --build-name " + buildName;
 
             // execute the script, expected return code is 0
             return executeScript(scriptArguments, 0);
@@ -161,8 +165,8 @@ public class PCTestDeploymentScriptService implements ScriptService
     {
         try {
             this.logger.error("Script arguments to be used: [{}]", scriptArguments);
-            this.logger.error("- expected script location: [{}]", System.getProperty("user.dir"));
-            this.logger.error("- expected script filename: [{}]", this.scriptFile);
+            this.logger.error(" * expected script location: [{}]", System.getProperty("user.dir"));
+            this.logger.error(" * expected script filename: [{}]", this.scriptFile);
 
             File f = new File(this.scriptFile);
             if (!f.exists() || f.isDirectory()) {
@@ -170,10 +174,20 @@ public class PCTestDeploymentScriptService implements ScriptService
                 return false;
             }
 
-            String fullCommand = this.EXECUTION_PREFIX + this.scriptFile + scriptArguments;
-            this.logger.error("- full command to be executed: [{}]", fullCommand);
-
-            Process p = Runtime.getRuntime().exec(fullCommand);
+            Process p;
+            if (this.IS_WINDOWS) {
+                String fullCommand = this.EXECUTION_PREFIX + this.scriptFile + scriptArguments;
+                this.logger.error("- full command to be executed: [{}]", fullCommand);
+                p = Runtime.getRuntime().exec(fullCommand);
+            } else {
+                // we need OpenStack environemnt variables to be available, which in Linux  means explicitly
+                // invoking bash with a "--login" parameter to force sourcing profile.d scripts
+                // FIXME: maybe there is an easier way? Tried a few other options and they did not work
+                String[] cmdArray = { "/bin/bash", "--login", "-c",
+                                      this.EXECUTION_PREFIX + this.scriptFile + scriptArguments };
+                this.logger.error(" * full command to be executed: [{}]", String.join(" ", cmdArray));
+                p = Runtime.getRuntime().exec(cmdArray);
+            }
             int retcode = p.waitFor();
             this.logger.error("Execution finished with return code {}", retcode);
 

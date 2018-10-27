@@ -1,7 +1,7 @@
 #!/usr/bin/env python3.6
 
 """
-OpenStackClient script for starting a VM for a new test PhenomeCentral build for 3 branches
+Provides ability to start a VM (with provided metadata), list available VMs and kill an existing VM.
 """
 from __future__ import with_statement
 
@@ -11,15 +11,21 @@ import logging
 import openstack
 import subprocess
 
-DEFAULT_ACTION = 'depoly'
-DEFAULT_BRANCH_NAME = 'master'
-KEYPAIR_NAME = 'PCMain'
-SNAPSHOT_NAME = "test6-snapshot"
-IMAGE_NAME = "Ubuntu 16.04 LTS"
+#####################################################
+# OpenStack parameters
+#####################################################
+SNAPSHOT_NAME = "PC_deployment_base"
 FLAVOUR = "m2.medium"
+KEYPAIR_NAME = 'PCMain'
 NETWORK_NAME = "TestPC"
 KID_NETWORK_NAME = "Kidnet External"
+#####################################################
+
+# script parameters
 SERVER_LIST_FILE_NAME = "server_list.txt"
+DEFAULT_ACTION = 'deploy'
+DEFAULT_BRANCH_NAME = 'master'
+
 
 def script(settings):
     # Initialize and turn on debug openstack logging
@@ -52,9 +58,10 @@ def script(settings):
         print(data, file=open(SERVER_LIST_FILE_NAME, "w"))
         sys.exit(0)
 
-    # If the servier with the same build name already exists - delete it
+    # find if there already exists a VM with the given name
     server = conn.compute.find_server(settings.build_name)
 
+    # if a VM with the same build name already exists - delete it
     if server:
         logging.info("Server for build %s exists" % settings.build_name)
         logging.info(server)
@@ -80,6 +87,7 @@ def script(settings):
     metadatau['pc'] = settings.pc_branch_name
     metadatau['bn'] = settings.build_name
 
+    logging.info("Creating a new VM..........")
     from openstack.cloud import exc
     try:
         server = conn.compute.create_server(
@@ -130,6 +138,24 @@ def get_credentials():
     d['password'] = os.environ['OS_PASSWORD']
     return d
 
+def setup_logfile(settings):
+    if settings.action != 'deploy':
+        logname = settings.action
+    else:
+        logname = settings.build_name
+
+    # Wipe out previous log file with the same deployment name if exists
+    open('pc_deploy_{0}.log'.format(logname), 'w').close()
+
+    format_string = '%(levelname)s: %(asctime)s: %(message)s'
+    logging.basicConfig(filename='pc_deploy_{0}.log'.format(logname), level=logging.INFO, format=format_string)
+
+    # clone output to console
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console.setFormatter(logging.Formatter('[SCRIPT] %(levelname)s: %(message)s'))
+    logging.getLogger('').addHandler(console)
+
 def parse_args(args):
     from argparse import ArgumentParser
     parser = ArgumentParser()
@@ -151,16 +177,13 @@ def parse_args(args):
 
     args = parser.parse_args()
     return args
- 
+
 def main(args=sys.argv[1:]):
     settings = parse_args(args)
-    # Setup logging
-    format_string = '%(levelname)s: %(asctime)s: %(message)s'
-    logging.basicConfig(filename='pc_deploy_{0}.log'.format(settings.build_name), level=logging.INFO, format=format_string)
-    # Wipe out previous log file with the same deployment name if exists
-    open('pc_deploy_{0}.log'.format(settings.build_name), 'w').close()
-    logging.info('Started deployment with arguments: ')
-    logging.info('-->>'.join(sys.argv[1:]))
+
+    setup_logfile(settings)
+
+    logging.info('Started deployment with arguments: [' + ' '.join(sys.argv[1:]) + ']')
 
     script(settings)
 

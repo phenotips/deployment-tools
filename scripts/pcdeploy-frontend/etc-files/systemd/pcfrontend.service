@@ -1,0 +1,11 @@
+[Unit]
+Description=PC VM deploy frontend
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/pcinstall/pc_deploy_frontend.sh
+TimeoutStartSec=0
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,14 @@
+# this file is used to configure environemnt variables at system startup by /etc/profile.d/openstack.sh
+
+username: phenotips
+password: <password in plaintext goes here>
+
+project_domain_name: default
+project_id: 5d4f394aa6dd4412b0988ac267771584
+project_name: HSC_CCM_PhenoTips
+
+user_domain_name: Default
+openstack_interface: public
+openstack_api_version: 3
+
+openstack_auth_url: https://os.hpc4health.ca:5000/v3/

@@ -7,6 +7,11 @@ Loads test patient data to the running PhenomeCentral instance.
     https://github.com/xwiki/xwiki-platform/blob/6bc521593a1e41f69f9a20d03ffe8b7b979f7b59/xwiki-platform-core/xwiki-platform-web/src/main/webapp/resources/uicomponents/widgets/upload.js#L229
     https://github.com/xwiki/xwiki-platform/blob/6bc521593a1e41f69f9a20d03ffe8b7b979f7b59/xwiki-platform-core/xwiki-platform-web/src/main/webapp/resources/js/xwiki/importer/import.js#L389
 - Copies sample processed VCF files "exomiser" folder to "/data" installation directory.
+
+* Prepequisite: 
+- script requires requests_toolbelt library installed before running
+$ pip install requests_toolbelt
+
 """
 
 from __future__ import with_statement
@@ -27,6 +32,7 @@ from requests_toolbelt.multipart.encoder import MultipartEncoder
 
 CONSENT_URL = 'http://localhost:8080/rest/patients/{0}/consents/assign'
 PATIENTS_REST_URL = 'http://localhost:8080/rest/patients'
+PATIENTS_REINDEX_REST_URL = 'http://localhost:8080/rest/patients/reindex'
 CREDENTIALS = 'Admin:admin'
 XAR_UPLOAD_URL = 'http://localhost:8080/upload/XWiki/XWikiPreferences'
 XAR_IMPORT_URL = 'http://localhost:8080/import/XWiki/XWikiPreferences?'
@@ -49,6 +55,17 @@ def script(settings):
     # Copy sample of processed VCF file to "/data" installation directory
     if settings.copy_vcf:
         copy_processed_VCFs()
+
+    # Call patient reindexing because Solr does not reindex when XAR is imported
+    reindex_patients(session)
+
+def reindex_patients(session):
+    logging.info('Reindexing patients...')
+    req = session.get(PATIENTS_REINDEX_REST_URL)
+    if req.status_code in [200, 201]:
+        logging.info('Reindexed patients successfully')
+    else:
+        logging.error('Error during reindexing patients {0}'.format(req.status_code))
 
 
 def copy_processed_VCFs():

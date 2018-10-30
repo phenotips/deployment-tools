@@ -1,17 +1,18 @@
 #!/usr/bin/env python3.6
 
 """
-Loads test patient data to the running PhenomeCentral instance.
-- Loads patient data and updates patient consents from JSON via PhenoTips patient REST services.
-- Loads families, groups, studies, users, and configurations like remote server config from XAR file via platform-core XWiki XAR upload and import services:
-    https://github.com/xwiki/xwiki-platform/blob/6bc521593a1e41f69f9a20d03ffe8b7b979f7b59/xwiki-platform-core/xwiki-platform-web/src/main/webapp/resources/uicomponents/widgets/upload.js#L229
-    https://github.com/xwiki/xwiki-platform/blob/6bc521593a1e41f69f9a20d03ffe8b7b979f7b59/xwiki-platform-core/xwiki-platform-web/src/main/webapp/resources/js/xwiki/importer/import.js#L389
-- Copies sample processed VCF files "exomiser" folder to "/data" installation directory.
+Loads test patient data to a running PhenomeCentral instance:
+- assumes a "dataset" is represented by a folder in the "datasets" directory, folder name == dataset name
+- when uploading data, the directory is examined for the following files:
+  1) dataset.xar - assumed to contain only the necessary files, all of the files in the dataset will be uploaded
+                  Note that due to the way filenames are passed to the XWiki if there are too many files (hundreds?) the upload will be broken
+  2) P*****.json - each file is assumed to be a patient JSON. Those are uploaded via REST as new patients, and then granted all the hardcoded consents
+  3) (NOT WORKING YET) F*****.json - each file is assumed to be a family JSON. Those are uploaded via REST as new families
+                                     (and all member patients are granted all the hardcoded consents)
+  4) (NOT WORKING YET) P00xxxx*.tsv - each file is assumed to be a processed VCF, those are uploaded for the patient matching the P00xxxx
 
-* Prepequisite: 
-- script requires requests_toolbelt library installed before running
-$ pip install requests_toolbelt
-
+Prepequisite: script requires requests_toolbelt, zipfile and traceback Python libraries
+              (pip install requests_toolbelt; pip install zipfile; pip install requests_toolbelt)
 """
 
 from __future__ import with_statement
@@ -32,20 +33,30 @@ from requests import Session
 from requests_toolbelt.utils import dump
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 
-DATASETS_LIST_FILENAME = 'datasets_list.txt'
-DATASETS_ROOT_FOLDERNAME = 'datasets'
 
+#######################################################
+# Dataset settings & interface to running instance
+#######################################################
+DATASETS_ROOT_FOLDERNAME = 'datasets'
+DATA_XAR_FILENAME = 'dataset.xar'
+DATASETS_LIST_FILENAME = 'datasets_list.txt'
+#######################################################
+
+
+#######################################################
+# PC settings
+#######################################################
 CREDENTIALS = 'Admin:admin'
 CONSENT_URL = '/rest/patients/{0}/consents/assign'
+GRANT_CONSENT_NAMES = ["real", "genetic", "share_history", "share_images", "matching"]
 PATIENTS_REST_URL = '/rest/patients'
 PATIENTS_REINDEX_REST_URL = '/rest/patients/reindex'
 XAR_UPLOAD_URL = '/upload/XWiki/XWikiPreferences'
 XAR_IMPORT_URL = '/import/XWiki/XWikiPreferences?'
-
-DATA_XAR_FILENAME = 'dataset.xar'
-
 PROCESSED_EXOMISER_FILES_SRC_PATH = "exomiser"
-PROCESSED_EXOMISER_FILES_DEST_PATH = "/home/pcinstall/phenomecentral-standalone-1.2-SNAPSHOT/data/exomiser"
+PROCESSED_EXOMISER_FILES_DEST_PATH = "/home/pcinstall/deploy/phenomecentral-standalone-1.2-SNAPSHOT/data/exomiser"
+#######################################################
+
 
 def list_datasets():
     logging.info('Listing available datasets...')
@@ -132,22 +143,23 @@ def upload_json_patients(settings, session):
     files_found = False
     for file_name in os.listdir(settings.dataset_folder):
         if file_name.endswith(".json"):
-            full_file_name = os.path.join(settings.dataset_folder, file_name)
-            logging.info('Found JSON file {0}'.format(full_file_name))
-            files_found = True
-            internal_upload_json(settings, session, full_file_name)
+            if file_name.startswith("P"):
+                full_file_name = os.path.join(settings.dataset_folder, file_name)
+                logging.info('Found Patient JSON file {0}'.format(full_file_name))
+                files_found = True
+                internal_upload_patient_json(settings, session, full_file_name)
 
     if not files_found:
         logging.info('* no JSON files found')
 
-def internal_upload_json(settings, session, json_file_name):
+def internal_upload_patient_json(settings, session, json_file_name):
     f = open(json_file_name, "r") 
     payload = f.read()
 
     try:
         payload = json.loads(payload)
     except:
-        logging.info('* file does not contain valid JSON data')
+        logging.info('* [ERROR] file does not contain valid JSON data')
         return
 
     # sample data
@@ -166,13 +178,11 @@ def internal_upload_json(settings, session, json_file_name):
     patient_rest_url = compose_url(settings, PATIENTS_REST_URL)
     req = session.post(patient_rest_url, data=json.dumps(payload), headers=headers)
     if req.status_code in [200, 201]:
-        #d = dump.dump_all(req)
-        #logging.error(d.decode('utf-8'))
-        logging.info('* created new patien')
+        logging.info('* created new patient')
         new_patient_id = req.headers['Location'].rsplit("/",1)[1]
         logging.info('* new patient id: {0}'.format(new_patient_id))
-        consents = ["real", "genetic", "share_history", "share_images", "matching"]
-        grant_consents(settings, session, new_patient_id, consents)
+        # grant predefined set of consents
+        grant_consents(settings, session, new_patient_id, GRANT_CONSENT_NAMES)
     else:
         logging.error('Error: Attempt to load patient failed {0}'.format(req.status_code))
         #d = dump.dump_all(req)
@@ -187,7 +197,7 @@ def grant_consents(settings, session, patient_id, consents):
     headers = {'Content-Type': 'application/json'}
     req = session.put(consents_rest_url, data=json.dumps(consents), headers=headers)
     if req.status_code in [200,201]:
-        logging.info('* granted patient consents {0}'.format(str(consents)))
+        logging.info('* granted consents {0}'.format(str(consents)))
     else:
         logging.error('Error: Attempt to grant patient all consents failed with HTTP code {0}'.format(req.status_code))
         sys.exit(-4)
@@ -195,6 +205,9 @@ def grant_consents(settings, session, patient_id, consents):
     logging.info('->Finished loading patients to PhenomeCentral instance.')
 
 
+# see also:
+#   https://github.com/xwiki/xwiki-platform/blob/6bc521593a1e41f69f9a20d03ffe8b7b979f7b59/xwiki-platform-core/xwiki-platform-web/src/main/webapp/resources/uicomponents/widgets/upload.js#L229
+#   https://github.com/xwiki/xwiki-platform/blob/6bc521593a1e41f69f9a20d03ffe8b7b979f7b59/xwiki-platform-core/xwiki-platform-web/src/main/webapp/resources/js/xwiki/importer/import.js#L389
 def upload_xar(settings, session, xar_file_name):
     full_file_name = os.path.join(settings.dataset_folder, xar_file_name)
     if not os.path.isfile(full_file_name):

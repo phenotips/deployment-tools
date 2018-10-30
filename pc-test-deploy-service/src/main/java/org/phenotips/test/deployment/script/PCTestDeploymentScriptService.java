@@ -25,6 +25,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
+import java.io.IOException;
 
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -35,7 +36,7 @@ import org.json.JSONArray;
 import org.slf4j.Logger;
 
 /**
- * Allows to call Python deployment script for spinning OpenStack VM for customized PhenomeCentral build.
+ * Allows spinning, monitoring and managing OpenStack VMs for customized test PhenomeCentral builds via Python scripts.
  *
  * @version $Id: d9a7db2d905d386d7e8ff3878095b0ec6c61db32 $
  * @since 1.2
@@ -50,51 +51,59 @@ public class PCTestDeploymentScriptService implements ScriptService
 
     // In Windows it is easier to manually specify the interpreter for the script
     //
-    // Linux can run python scripts directly using a header like "#!/usr/bin/env python3.6". At the same time in Linux
+    // Linux can run Python scripts directly using a header like "#!/usr/bin/env python3.6". At the same time in Linux
     // it is harder to know the exact interpreter to be used, e.g. "python", "python3.6", or something else.
     private static final String EXECUTION_PREFIX = IS_WINDOWS ? "python " : "./";
 
     @Inject
     private Logger logger;
 
-    /** Python script file. **/
+    /** Python script file for spinning OpenStack VM. **/
     private final String scriptFile = "openstack_vm_deploy.py";
+
+    /** Python script file to load test data. **/
+    private final String scriptLoadDataFile = "load_test_data.py";
 
     /** Text file holding OpenStack running servers info JSON. **/
     private final String serversFile = "server_list.txt";
 
+    /** Text file holding test datasets directories names. **/
+    private final String datasetsFile = "datasets_list.txt";
+
     /**
      * Runs Python script with parameters.
      *
-     * @param pnBrnachName Patient-Network GitHub repository branch name
-     * @param rmBrnachName Remote-Matching GitHub repository branch name
-     * @param pcBrnachName PhenomeCentral GitHub repository branch name
+     * @param pnBrnachName Patient Network GitHub repository branch name (optional, defaults to "master")
+     * @param rmBrnachName Remote Matching GitHub repository branch name (optional, defaults to "master")
+     * @param pcBrnachName PhenomeCentral GitHub repository branch name (optional, defaults to "master")
      * @param buildName user-defined PhenomeCentral test build name
+     *     (optional, defaults to "master" if first 3 parameters are not specified,
+     *     or composed of them in a form of "pnBrnachName_rmBrnachName_pcBrnachName")
      * @return true if the VM has successfully started up
      */
     @SuppressWarnings({ "checkstyle:NPathComplexity", "checkstyle:CyclomaticComplexity" })
-    public boolean runDeploymentScript(String pnBrnachName, String rmBrnachName, String pcBrnachName, String buildName)
+    public boolean deploy(String pnBrnachName, String rmBrnachName, String pcBrnachName, String buildName)
     {
         try {
             this.logger.error("Running deployment script for branches PN[{}], RM[{}], PC[{}]",
                 pnBrnachName, rmBrnachName, pcBrnachName);
 
             String scriptArguments = " --action deploy";
-            if (pnBrnachName != null && StringUtils.isNotBlank(pnBrnachName)) {
+            if (StringUtils.isNotBlank(pnBrnachName)) {
                 scriptArguments = scriptArguments + " --pn " + pnBrnachName;
             }
-            if (rmBrnachName != null && StringUtils.isNotBlank(rmBrnachName)) {
+            if (StringUtils.isNotBlank(rmBrnachName)) {
                 scriptArguments = scriptArguments + " --rm " + rmBrnachName;
             }
-            if (pcBrnachName != null && StringUtils.isNotBlank(pcBrnachName)) {
+            if (StringUtils.isNotBlank(pcBrnachName)) {
                 scriptArguments = scriptArguments + " --pc " + pcBrnachName;
             }
-            if (buildName != null && StringUtils.isNotBlank(buildName)) {
+            if (StringUtils.isNotBlank(buildName)) {
                 scriptArguments = scriptArguments + " --build-name " + buildName;
             }
 
             // execute the script, expected return code is 0
-            return executeScript(scriptArguments, 0);
+            return executeScript(this.scriptFile, scriptArguments, 0);
         } catch (Exception ex) {
             this.logger.error("Error executing deployment script: {}", ex);
         }
@@ -114,16 +123,10 @@ public class PCTestDeploymentScriptService implements ScriptService
             String scriptArguments = " --action list";
 
             // execute the script, expected return code is 0
-            if (executeScript(scriptArguments, 0)) {
+            if (executeScript(this.scriptFile, scriptArguments, 0)) {
                 this.logger.error("* attempting to parse server list file [{}]", this.serversFile);
 
-                String serversInfo = "";
-                BufferedReader in = new BufferedReader(new FileReader(this.serversFile));
-
-                String line;
-                while ((line = in.readLine()) != null) {
-                    serversInfo += line;
-                }
+                String serversInfo = readFile(this.serversFile);
 
                 return new JSONArray(serversInfo);
             }
@@ -147,44 +150,114 @@ public class PCTestDeploymentScriptService implements ScriptService
         try {
             this.logger.error("Removing existing VM for build [{}]", buildName);
 
-            if (buildName == null || StringUtils.isBlank(buildName)) {
+            if (StringUtils.isBlank(buildName)) {
                 return false;
             }
 
             String scriptArguments = " --action delete --build-name " + buildName;
 
             // execute the script, expected return code is 0
-            return executeScript(scriptArguments, 0);
+            return executeScript(this.scriptFile, scriptArguments, 0);
         } catch (Exception ex) {
             this.logger.error("Error removing VM for build [{}] : {}", buildName, ex);
         }
         return false;
     }
 
-    private boolean executeScript(String scriptArguments, int expectedReturnCode) throws Exception
+    /**
+     * Load test data to server instance specified by IP.
+     *
+     * @param ip the IP address of the server to load data to
+     * @param dataName name of the test data directory
+     * @return true if the data was successfully loaded
+     */
+    public boolean loadTestData(String ip, String dataName)
+    {
+        try {
+            this.logger.error("Loading test data to VM with IP [{}]", ip);
+
+            if (StringUtils.isBlank(ip) || StringUtils.isBlank(dataName)) {
+                return false;
+            }
+
+            String scriptArguments = "--action upload-dataset --ip " + ip + " --data-name " + dataName;
+
+            // execute the script, expected return code is 0
+            return executeScript(this.scriptLoadDataFile, scriptArguments, 0);
+        } catch (Exception ex) {
+            this.logger.error("Error loading test data [{}] to VM with IP [{}] : {}", dataName, ip, ex);
+        }
+        return false;
+    }
+
+    /**
+     * List test datasets directories names.
+     *
+     * @return JSONArray with list of strings that represent directory names with test data.
+     */
+    public JSONArray listTestDatasets()
+    {
+        try {
+            this.logger.error("Getting the list of test datasets directories");
+
+            String scriptArguments = " --action list-datasets";
+
+            // execute the script, expected return code is 0
+            if (executeScript(this.scriptLoadDataFile, scriptArguments, 0)) {
+                this.logger.error("* attempting to parse test datasets list file [{}]", this.datasetsFile);
+
+                String datasets = readFile(this.datasetsFile);
+                return new JSONArray(datasets);
+            }
+        } catch (FileNotFoundException ex) {
+            this.logger.error(
+                "Error: script did not generate test datasets list file [{}] or the file could not be found",
+                this.datasetsFile);
+        } catch (Exception ex) {
+            this.logger.error("Error executing test datasets list script: {}", ex);
+        }
+        return null;
+    }
+
+    private String readFile(String fileName) throws IOException
+    {
+        String data = "";
+        BufferedReader in = new BufferedReader(new FileReader(fileName));
+
+        String line;
+        while ((line = in.readLine()) != null) {
+            data += line;
+        }
+        in.close();
+
+        return data;
+    }
+
+    private boolean executeScript(String scriptFileName, String scriptArguments, int expectedReturnCode)
+        throws Exception
     {
         try {
             this.logger.error("Script arguments to be used: [{}]", scriptArguments);
             this.logger.error(" * expected script location: [{}]", System.getProperty("user.dir"));
-            this.logger.error(" * expected script filename: [{}]", this.scriptFile);
+            this.logger.error(" * expected script filename: [{}]", scriptFileName);
 
-            File f = new File(this.scriptFile);
+            File f = new File(scriptFileName);
             if (!f.exists() || f.isDirectory()) {
-                this.logger.error("Script file [{}] not found", this.scriptFile);
+                this.logger.error("Script file [{}] not found", scriptFileName);
                 return false;
             }
 
             Process p;
-            if (this.IS_WINDOWS) {
-                String fullCommand = this.EXECUTION_PREFIX + this.scriptFile + scriptArguments;
+            if (IS_WINDOWS) {
+                String fullCommand = EXECUTION_PREFIX + scriptFileName + scriptArguments;
                 this.logger.error("- full command to be executed: [{}]", fullCommand);
                 p = Runtime.getRuntime().exec(fullCommand);
             } else {
-                // we need OpenStack environemnt variables to be available, which in Linux  means explicitly
+                // we need OpenStack environment variables to be available, which in Linux means explicitly
                 // invoking bash with a "--login" parameter to force sourcing profile.d scripts
                 // FIXME: maybe there is an easier way? Tried a few other options and they did not work
-                String[] cmdArray = { "/bin/bash", "--login", "-c",
-                                      this.EXECUTION_PREFIX + this.scriptFile + scriptArguments };
+                String[] cmdArray =
+                { "/bin/bash", "--login", "-c", EXECUTION_PREFIX + scriptFileName + scriptArguments };
                 this.logger.error(" * full command to be executed: [{}]", String.join(" ", cmdArray));
                 p = Runtime.getRuntime().exec(cmdArray);
             }
@@ -201,4 +274,3 @@ public class PCTestDeploymentScriptService implements ScriptService
         return false;
     }
 }
-

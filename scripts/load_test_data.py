@@ -23,6 +23,8 @@ import logging
 import json
 import re
 import requests
+import zipfile
+import traceback
 
 from argparse import ArgumentParser
 from base64 import b64encode
@@ -30,31 +32,54 @@ from requests import Session
 from requests_toolbelt.utils import dump
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 
-CONSENT_URL = 'http://localhost:8080/rest/patients/{0}/consents/assign'
-PATIENTS_REST_URL = 'http://localhost:8080/rest/patients'
-PATIENTS_REINDEX_REST_URL = 'http://localhost:8080/rest/patients/reindex'
+DATASETS_LIST_FILENAME = 'datasets_list.txt'
+DATASETS_ROOT_FOLDERNAME = 'datasets'
+
 CREDENTIALS = 'Admin:admin'
-XAR_UPLOAD_URL = 'http://localhost:8080/upload/XWiki/XWikiPreferences'
-XAR_IMPORT_URL = 'http://localhost:8080/import/XWiki/XWikiPreferences?'
-DATA_XAR_FILENAME = 'pc-data.xar'
+CONSENT_URL = '/rest/patients/{0}/consents/assign'
+PATIENTS_REST_URL = '/rest/patients'
+PATIENTS_REINDEX_REST_URL = '/rest/patients/reindex'
+XAR_UPLOAD_URL = '/upload/XWiki/XWikiPreferences'
+XAR_IMPORT_URL = '/import/XWiki/XWikiPreferences?'
+
+DATA_XAR_FILENAME = 'dataset.xar'
+
 PROCESSED_EXOMISER_FILES_SRC_PATH = "exomiser"
 PROCESSED_EXOMISER_FILES_DEST_PATH = "/home/pcinstall/phenomecentral-standalone-1.2-SNAPSHOT/data/exomiser"
-XAR_FILE_NAMES = ['Families.FAM0000001', 'Families.FAM0000002', 'Families.FAM0000003', 'Groups.UDN', 'Groups.UDN Managers', 'XWiki.John', 'XWiki.Julia', 'XWiki.Mary', 'XWiki.Pat', 'XWiki.Peter', 'data.P0000001', 'data.P0000002', 'data.P0000003', 'data.P0000004', 'data.P0000005', 'data.P0000006', 'data.P0000007', 'data.P0000008', 'data.P0000009', 'data.P0000010', 'data.P0000011', 'data.P0000012', 'data.P0000013', 'data.P0000014', 'data.P0000015', 'data.P0000016', 'data.P0000017', 'data.P0000018']
 
+def list_datasets():
+    logging.info('Listing available datasets...')
+    datasets_list = []
+    dataset_list = os.listdir(DATASETS_ROOT_FOLDERNAME)
+    print(dataset_list, file=open(DATASETS_LIST_FILENAME, "w"))
+    sys.exit(0)
 
-def script(settings):
+def compose_url(settings, resource_url):
+    prefix = 'https://' if settings.use_https else 'http://'
+    return prefix + settings.server_ip + resource_url;
+
+def upload_data(settings):
+    logging.info('Starting uploading data {0} to server {1}'.format(settings.dataset_name, settings.server_ip))
+
+    dataset_folder = os.path.join(DATASETS_ROOT_FOLDERNAME, settings.dataset_name)
+    if not os.path.isdir(dataset_folder):
+        logging.error('Error: dataset folder {0} does not exist'.format(dataset_folder))
+        sys.exit(-2)
+    else:
+        settings.dataset_folder = dataset_folder
+
     # authorise
-    session = get_session()
-
-    # load patient data with consents via REST service
-    load_patients(session)
+    session = get_session(settings)
 
     # load and, if upload is successful, import XAR file to the running instance
-    upload_xar(session, DATA_XAR_FILENAME)
+    upload_xar(settings, session, DATA_XAR_FILENAME)
+
+    # load patient data with consents via REST service: after uploading XARs, since XARs assume fixed
+    # patient ids, while REST can create new patients with new IDs on top of those imported by XAR
+    upload_json_patients(settings, session)
 
     # Copy sample of processed VCF file to "/data" installation directory
-    if settings.copy_vcf:
-        copy_processed_VCFs()
+    #copy_processed_VCFs()
 
     # Call patient reindexing because Solr does not reindex when XAR is imported
     reindex_patients(session)
@@ -87,7 +112,7 @@ def copy_processed_VCFs():
             print('Exomiser directory not copied. Error: %s' % e)
 
 
-def get_session():
+def get_session(settings):
     session = Session()
     auth = b64encode(CREDENTIALS.encode()).decode()
     session.headers.update({
@@ -95,60 +120,106 @@ def get_session():
             'Content-Type': 'text/plain',
             'Accept': '*/*'
             })
-    session.head('http://localhost:8080')
+    base_url = compose_url(settings, '')
+    logging.info('Using base server URL {0}'.format(base_url))
+    session.head(base_url)
     return session
 
 
-def load_patients(session):
-    logging.info('Loading patients to PhenomeCentral instance ...')
-    # load patient data
-    payload = {
-        "clinicalStatus" : "affected",
-        "genes" : [
-            {"gene":"T", "id":"ENSG00000164458", "status":"candidate"}
-            ],
-        "features": [
-            {"id":"HP:0001363", "label":"Craniosynostosis", "type":"phenotype", "observed":"yes"},
-            {"id":"HP:0004325", "label":"Decreased body weight", "type":"phenotype", "observed":"yes"}
-            ]
-        }
+def upload_json_patients(settings, session):
+    logging.info('Searching for JSON files to be uploaded...')
+
+    files_found = False
+    for file_name in os.listdir(settings.dataset_folder):
+        if file_name.endswith(".json"):
+            full_file_name = os.path.join(settings.dataset_folder, file_name)
+            logging.info('Found JSON file {0}'.format(full_file_name))
+            files_found = True
+            internal_upload_json(settings, session, full_file_name)
+
+    if not files_found:
+        logging.info('* no JSON files found')
+
+def internal_upload_json(settings, session, json_file_name):
+    f = open(json_file_name, "r") 
+    payload = f.read()
+
+    try:
+        payload = json.loads(payload)
+    except:
+        logging.info('* file does not contain valid JSON data')
+        return
+
+    # sample data
+    #payload = {
+    #    "clinicalStatus" : "affected",
+    #    "genes" : [
+    #        {"gene":"T", "id":"ENSG00000164458", "status":"candidate"}
+    #        ],
+    #    "features": [
+    #        {"id":"HP:0001363", "label":"Craniosynostosis", "type":"phenotype", "observed":"yes"},
+    #        {"id":"HP:0004325", "label":"Decreased body weight", "type":"phenotype", "observed":"yes"}
+    #        ]
+    #    }
 
     headers = {'Content-Type': 'application/json'}
-    req = session.post(PATIENTS_REST_URL, data=json.dumps(payload), headers=headers)
+    patient_rest_url = compose_url(settings, PATIENTS_REST_URL)
+    req = session.post(patient_rest_url, data=json.dumps(payload), headers=headers)
     if req.status_code in [200, 201]:
-        logging.info('Loaded patient data for patient')
+        #d = dump.dump_all(req)
+        #logging.error(d.decode('utf-8'))
+        logging.info('* created new patien')
+        new_patient_id = req.headers['Location'].rsplit("/",1)[1]
+        logging.info('* new patient id: {0}'.format(new_patient_id))
         consents = ["real", "genetic", "share_history", "share_images", "matching"]
-        grant_consents(session, consents)
+        grant_consents(settings, session, new_patient_id, consents)
     else:
         logging.error('Error: Attempt to load patient failed {0}'.format(req.status_code))
+        #d = dump.dump_all(req)
+        #logging.error(d.decode('utf-8'))
+        sys.exit(-3)
 
 
-def grant_consents(session, consents):
+def grant_consents(settings, session, patient_id, consents):
+    consents_rest_url = compose_url(settings, CONSENT_URL.format(patient_id))
+    logging.info('* updating patient consents using URL {0}'.format(consents_rest_url))
+
     headers = {'Content-Type': 'application/json'}
-    req = session.put(CONSENT_URL.format('P0000001'), data=json.dumps(consents), headers=headers)
-    if req.status_code in [200, 201]:
-        logging.info('Granted patient all consents')
+    req = session.put(consents_rest_url, data=json.dumps(consents), headers=headers)
+    if req.status_code in [200,201]:
+        logging.info('* granted patient consents {0}'.format(str(consents)))
     else:
-        logging.error('Error: Attempt to grant patient all consents failed {0}'.format(req.status_code))
+        logging.error('Error: Attempt to grant patient all consents failed with HTTP code {0}'.format(req.status_code))
+        sys.exit(-4)
 
     logging.info('->Finished loading patients to PhenomeCentral instance.')
 
 
-def upload_xar(session, filename):
-    logging.info('Loading XAR to PhenomeCentral instance ...')
+def upload_xar(settings, session, xar_file_name):
+    full_file_name = os.path.join(settings.dataset_folder, xar_file_name)
+    if not os.path.isfile(full_file_name):
+        logging.info('Skipping XAR upload: file {0} is not included in the dataset'.format(xar_file_name))
+        return
+
+    logging.info('Uploading XAR {0} to the server...'.format(full_file_name))
 
     # Parsing form token
-    result = session.get(XAR_IMPORT_URL)
+    xar_import_url = compose_url(settings, XAR_IMPORT_URL)
+    result = session.get(xar_import_url)
+    if result.status_code != 200:
+        logging.error("Can't access XAR upload page {0}, status code {1}".format(xar_import_url, result.status_code))
+        sys.exit(-5)
+
     form_token_match = re.search('name="form_token" content="(.*)"', result.text)
     if not form_token_match:
         logging.error("Can't upload xar, form token not parsed")
-        return
-    logging.info("Form token: {0}".format(form_token_match.group(1)))
+        sys.exit(-6)
+    else:
+        logging.info("* form token: {0}".format(form_token_match.group(1)))
 
     # Prepare XAR payload for upload
-    filebase = os.path.basename(filename)
     m_enc = MultipartEncoder( fields={
-            'filepath': (filebase, open(filebase, 'rb')),
+            'filepath': (xar_file_name, open(full_file_name, 'rb')),
             'xredirect': '/import/XWiki/XWikiPreferences?editor=globaladmin&section=Import',
             'form_token': form_token_match.group(1)} )
 
@@ -159,53 +230,83 @@ def upload_xar(session, filename):
     #print("REPLY STATUS: ", req.status_code)
 
     if req.status_code in [200, 201, 302]:
-        logging.info('Uploaded xar file: {0}'.format(filename))
-        import_xar_files(session, filename)
+        logging.info('* uploaded xar file: {0}'.format(full_file_name))
+        import_xar_files(session, full_file_name, xar_file_name)
     else:
         logging.error('Unexpected response ({0}) from uploading XAR file {1}'.format(req.status_code, filename))
+        sys.exit(-7)
 
+def import_xar_files(session, full_file_name, xar_file_name):
+    logging.info('Importing documents from an uploaded XAR file...')
 
-def import_xar_files(session, filename):
-    logging.info('Importing XAR files to PhenomeCentral instance ...')
+    payload = 'editor=globaladmin&section=Import&action=import&name=' + xar_file_name + '&historyStrategy=replace&importAsBackup=false&ajax=1'
 
-    payload = 'editor=globaladmin&section=Import&action=import&name=' + filename + '&historyStrategy=replace&importAsBackup=false&ajax=1'
-
-    for file in XAR_FILE_NAMES:
+    # Parse XAR file, loop through list of its files and compose the payload
+    zip=zipfile.ZipFile(full_file_name)
+    filename_list = zip.namelist()
+    for file in filename_list:
         name = file  + ':'
         payload = payload + '&language_' + name + '=&pages=' + name
 
     headers = {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'}
     req = session.post(XAR_IMPORT_URL + payload, headers=headers)
-    d = dump.dump_all(req)
     if req.status_code in [200, 201]:
-        logging.info('Imported XAR files')
+        logging.info('Imported XWiki documents from XAR file')
     else:
         logging.error('Error: Importing XAR files failed {0}'.format(req.status_code))
-    # logging.info(d.decode('utf-8'))
+        sys.exit(-8)
+        # d = dump.dump_all(req)
+        # logging.error(d.decode('utf-8'))
 
 
-def parse_args(args):
-    parser = ArgumentParser()
-    parser.add_argument("--vcf", dest='copy_vcf',
-                      action="store_true",
-                      help="copies processed vcf files to patients data if set, default false")
-    args = parser.parse_args()
-    return args
+def setup_logfile(settings):
+    if settings.action == 'list-datasets':
+        log_name = "dataset_list.log"
+    else:
+        log_name = "upload_data.log";
 
-def main(args=sys.argv[1:]):
-    settings = parse_args(args)
+    # Wipe out previous log file with the same deployment name if exists
+    open(log_name, 'w').close()
+
     format_string = '%(levelname)s: %(asctime)s: %(message)s'
-    logging.basicConfig(filename='load_data.log', level=logging.INFO, format=format_string)
+    logging.basicConfig(filename=log_name, level=logging.INFO, format=format_string)
+
     # clone output to console
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
     console.setFormatter(logging.Formatter('[SCRIPT] %(levelname)s: %(message)s'))
-    logging.getLogger('').addHandler(console)    
-    # Wipe out previous log file
-    open('load_data.log', 'w').close()
-    logging.info('Started data load with arguments: ')
-    logging.info('-->>'.join(sys.argv[1:]))
-    script(settings)
+    logging.getLogger('').addHandler(console)
+
+def parse_args(args):
+    parser = ArgumentParser()
+    parser.add_argument("--action", dest='action', required=True,
+                      help="either `list-datasets` or `upload-dataset`");
+    parser.add_argument("--ip", dest='server_ip',
+                      help="when uploading datasets, the base address of the server that should get the dataset (e.g. `localhost:8080`)");
+    parser.add_argument("--dataset-name", dest='dataset_name',
+                      help="when uploading datasets, the name of the dataset to be uploaded");
+    parser.add_argument("--use-https", dest='use_https',
+                      action="store_true",
+                      help="use HTTPS instead of HTTp to connect to the server")
+    args = parser.parse_args()
+
+    if args.action == 'upload-dataset' and (args.server_ip is None or args.dataset_name is None):
+        parser.error("Action 'upload-dataset' requires --ip and --dataset-name")
+
+    return args
+
+def main(args=sys.argv[1:]):
+    settings = parse_args(args)
+    setup_logfile(settings)
+
+    try:
+        if settings.action == 'list-datasets':
+            list_datasets()
+        else:
+            upload_data(settings)
+    except Exception:
+        logging.error('Exception: [{0}]'.format(traceback.format_exc()))
+        sys.exit(-1)
 
 if __name__ == '__main__':
     sys.exit(main())

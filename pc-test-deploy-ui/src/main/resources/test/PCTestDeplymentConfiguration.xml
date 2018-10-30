@@ -80,7 +80,7 @@ Please, select branches for the following GitHub repositories for a PhenomeCentr
 &lt;/select&gt;##
 &lt;span class="buttonwrapper"&gt;&lt;a class="button load-data" href="$obj.get('ip')"&gt;&lt;span class="fa fa-cloud-upload"&gt; &lt;/span&gt;&lt;span&gt;Load&lt;/span&gt;&lt;/a&gt;&lt;/span&gt;{{/html}}#end##
   |(% class="run-status $completedCSS" %)$obj.get('status')##
-  |(% class="logs" %){{html clean="false"}}&lt;a href="http://$escapetool.xml($obj.get('ip')):8080/resources/serverlog.txt" target="_blank">logs&lt;/a&gt;{{/html}}##
+  |(% class="logs" %)#if($obj.get('status') == "active"){{html clean="false"}}&lt;a href="http://$escapetool.xml($obj.get('ip')):8080/resources/serverlog.txt" target="_blank">logs&lt;/a&gt;{{/html}}#end##
   |(% class="action-delete" %){{html clean="false"}}&lt;span class="buttonwrapper"&gt;&lt;a class="button delete-server" href="$obj.get('name')"&gt;&lt;span class="fa fa-trash"&gt; &lt;/span&gt;&lt;span&gt;Delete&lt;/span&gt;&lt;/a&gt;&lt;/span&gt;{{/html}}
 #end
 {{/velocity}}</content>
@@ -199,7 +199,11 @@ var generateBranchSelect = function (repo, jsonArray) {
     var selectDiv = new Element('div', {'class' : 'repo-select'}).insert(new Element('label', {'class' : 'repo-label'}).update(repoLink));
     var select = new Element('select', {'id': 'repo-select-' + repo});
     jsonArray.each(function(branch) {
-        select.insert(new Element('option', {'value': branch.name}).update(branch.name));
+        var branchData = { 'value': branch.name };
+        if (branch.name == "master") {
+            branchData["selected"] = true;
+        }
+        select.insert(new Element('option', branchData).update(branch.name));
     });
     selectDiv.insert(select);
     return selectDiv;
@@ -305,7 +309,7 @@ var attachLoadDataListeners = function () {
     });
 }
 
-var attachDeleteServerListeners  = function () {
+var attachButtonHandlers  = function () {
     attachServerDeleteListeners();
     attachLoadDataListeners();
 }
@@ -352,7 +356,7 @@ var updateUI = function () {
 
 document.observe('xwiki:dom:loaded', function() {
     requestReposInfo();
-    attachDeleteServerListeners();
+    attachButtonHandlers();
 });</code>
     </property>
     <property>

@@ -1,0 +1,11 @@
+{
+  "sex": "O",
+  "clinicalStatus" : "affected",
+  "genes" : [
+      {"gene":"T", "id":"ENSG00000164458", "status":"candidate"}
+  ],
+  "features": [
+      {"id":"HP:0001363", "label":"Craniosynostosis", "type":"phenotype", "observed":"yes"},
+      {"id":"HP:0004325", "label":"Decreased body weight", "type":"phenotype", "observed":"yes"}
+  ]
+}

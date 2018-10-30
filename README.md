@@ -51,4 +51,21 @@ sudo pip3.6 install gitpython
 - TODO: `exomiser` instalation
 - Get the [pc_deploy_build_inside_vm.py](scripts/pc_deploy_build_inside_vm.py) file from this repository into the VM. Make sure `VM_METADATA_URL` variable is set correctly (it is used to get VM metadata).
 - There is no need to install openstack client utilities inside the VM, the only communication between the VM and OpenStack is via a request to the URl specified in `VM_METADATA_URL`
-- TODO: autostart inside VM instructions
+- autostart inside VM instructions:
+  - create a new service file in /etc/systemd/system, e.g:
+```
+[Unit]
+Description=PC build deploy backend
+After=network.target
+
+[Service]
+User=centos
+Type=simple
+ExecStart=/home/pcinstall/pc_deploy_build_inside_vm.py
+TimeoutStartSec=0
+
+[Install]
+WantedBy=default.target
+```
+  - systemctl daemon-reload
+  - systemctl enable servicename.service

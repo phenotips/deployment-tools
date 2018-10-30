@@ -49,11 +49,10 @@ def script(settings):
         data = []
         for server in servers_list:
             ipf = ''
-            logging.info(server)
-            array_addresses = server.addresses
-            if NETWORK_NAME not in array_addresses.keys():
+            #logging.info("Listing server : {0}".format(server.name))
+            if NETWORK_NAME not in server.addresses.keys():
                 continue
-            for address in array_addresses[NETWORK_NAME]:
+            for address in server.addresses[NETWORK_NAME]:
                 if address['OS-EXT-IPS:type'] == 'floating':
                     ipf = address['addr']
             data.append({'id' : server.id, 'name' : server.name, 'ip' : ipf, 'created' : server.created_at, 'status' : server.vm_state, 'metadata' : server.metadata})

@@ -50,7 +50,7 @@ Please, select branches for the following GitHub repositories for a PhenomeCentr
 ##
 == OpenStack PC running test instances ==
 ## TABLE HEADER
-#set ($headerNames = ['Server Name', 'Branches', 'IP', 'Started Time', 'Log', 'Status', 'Action'])
+#set ($headerNames = ['Server Name', 'Branches', 'IP', 'Started Time', 'Load test data', 'Status', 'Log', 'Action'])
 (% class="extradata-list server-list-row" %)
 #foreach($headerName in $headerNames)
   |=(% class="col-label" %)$headerName##
@@ -61,8 +61,9 @@ Please, select branches for the following GitHub repositories for a PhenomeCentr
 ##=========================================
 ## TABLE BODY
 #set ($serverList = $services.pcTestDeployment.listServers())
+#set ($datasetList = $services.pcTestDeployment.listTestDatasets())
 #foreach ($obj in $serverList)
-  #set($beginTime = $obj.get('created').replace('T','').replace('Z',''))
+  #set($beginTime = $obj.get('created').replace('T',' ').replace('Z',''))
   #set($pn = $obj.get('metadata').optString('pn'))
   #set($rm = $obj.get('metadata').optString('rm'))
   #set($pc = $obj.get('metadata').optString('pc'))
@@ -73,6 +74,11 @@ Please, select branches for the following GitHub repositories for a PhenomeCentr
                                                #if("${pc}" != ""), PC: &lt;span class="code"&gt;$pc&lt;/span&gt;#end{{/html}}##
   |(% class="ip" %){{html clean="false"}}&lt;a href="http://$escapetool.xml($obj.get('ip')):8080" target="_blank"&gt;$escapetool.xml($obj.get('ip'))&lt;/a&gt;{{/html}}##
   |(% class="begin-time" %)$!{beginTime}##
+  |(% class="load-test-data" %)#if($obj.get('status') == "active"){{html clean="false"}}##
+&lt;select class="test-dataset-select"&gt;##
+#foreach ($obj in $datasetList)&lt;option value="$obj"&gt;$obj&lt;/option&gt;#end##
+&lt;/select&gt;##
+&lt;span class="buttonwrapper"&gt;&lt;a class="button load-data" href="$obj.get('ip')"&gt;&lt;span class="fa fa-cloud-upload"&gt; &lt;/span&gt;&lt;span&gt;Load&lt;/span&gt;&lt;/a&gt;&lt;/span&gt;{{/html}}#end##
   |(% class="run-status $completedCSS" %)$obj.get('status')##
   |(% class="logs" %){{html clean="false"}}&lt;a href="http://$escapetool.xml($obj.get('ip')):8080/resources/serverlog.txt" target="_blank">logs&lt;/a&gt;{{/html}}##
   |(% class="action-delete" %){{html clean="false"}}&lt;span class="buttonwrapper"&gt;&lt;a class="button delete-server" href="$obj.get('name')"&gt;&lt;span class="fa fa-trash"&gt; &lt;/span&gt;&lt;span&gt;Delete&lt;/span&gt;&lt;/a&gt;&lt;/span&gt;{{/html}}
@@ -161,6 +167,7 @@ Please, select branches for the following GitHub repositories for a PhenomeCentr
       <code>var container = $('deploy-content');
 var BASE_API_URL = 'https://api.github.com/repos/phenotips/';
 var BASE_GITREPO_URL = 'https://github.com/phenotips/';
+var SERVICE_URL = new XWiki.Document('PCTestDeploymentService', 'PhenomeCentral').getURL('get');
 
 var repos = [
             'patient-network',
@@ -225,7 +232,7 @@ var requestReposInfo = function () {
   });
 }
 
-var attachDeleteServerListeners  = function () {
+var attachServerDeleteListeners = function () {
     $$('.delete-server').invoke('observe', 'click', function(clickEvent) {
         clickEvent.stop();
         var item = clickEvent.element();
@@ -235,12 +242,7 @@ var attachDeleteServerListeners  = function () {
           // Do nothing if the button was already clicked and it's waiting for a response from the server.
           return;
         } else {
-            var url = new XWiki.Document('PCTestDeploymentService', 'PhenomeCentral').getURL('get');
-            new XWiki.widgets.ConfirmedAjaxRequest(
-                /* Ajax request URL */
-                url,
-                /* Ajax request parameters */
-                {
+            new XWiki.widgets.ConfirmedAjaxRequest(SERVICE_URL, {
                   parameters: {
                     'action' : 'delete',
                     'buildName' : serverName
@@ -268,6 +270,46 @@ var attachDeleteServerListeners  = function () {
     });
 }
 
+var attachLoadDataListeners = function () {
+    $$('.button.load-data').invoke('observe', 'click', function(clickEvent) {
+        clickEvent.stop();
+        var item = clickEvent.element();
+        var serverIP = item.up('tr').down('.ip a').innerHTML;
+        var dataName = item.up('td').down('select').value;
+        item.blur();
+        if (item.disabled) {
+            // Do nothing if the button was already clicked and it's waiting for a response from the server.
+            return;
+        } else {
+            new Ajax.Request(SERVICE_URL, {
+                parameters: {
+                    'action'   : 'load-data',
+                    'ip'       : serverIP,
+                    'dataName' : dataName
+                },
+                method: "get",
+                onCreate : function() {
+                    console.log('Sending');
+                },
+                onSuccess: function(response) {
+                    console.log('Success');
+                },
+                onComplete : function() {
+                    console.log('Complete');
+                },
+                onFailure : function() {
+                    console.log('Failed');
+                }
+            });
+        }
+    });
+}
+
+var attachDeleteServerListeners  = function () {
+    attachServerDeleteListeners();
+    attachLoadDataListeners();
+}
+
 var updateUI = function () {
     repos.each(function (repo) {
         container.insert(selects[repo]);
@@ -279,17 +321,20 @@ var updateUI = function () {
     deployNameDiv.insert(deployNameInput);
     container.insert(deployNameDiv);
 
-    var button = new Element('input', {'class' : 'button', 'type' : 'button', 'id':'deploy', 'value':'Deploy'});
-    container.insert(button);
+    // var button = new Element('input', {'class' : 'button', 'type' : 'button', 'id':'deploy', 'value':'Deploy'});
+    var button = new Element('span', {'class' : 'buttonwrapper'});
+    var buttonA = new Element('a', {'class' : 'button load-data', 'id':'deploy', 'href' : '#'})
+                                   .insert(new Element('span', {'class' : 'fa fa-upload'}).update(" "))
+                                   .insert(new Element('span').update("Deploy"));
+    container.insert(button.insert(buttonA));
 
     button.observe('click', function (event) {
-        var url = new XWiki.Document('PCTestDeploymentService', 'PhenomeCentral').getURL('get');
-        new Ajax.Request(url, {
+        new Ajax.Request(SERVICE_URL, {
             parameters: {
                 'pnBrnachName' : $('repo-select-patient-network').value,
                 'rmBrnachName' : $('repo-select-remote-matching').value,
                 'pcBrnachName' : $('repo-select-phenomecentral.org').value,
-                'buildName' : $('deploy-name').value
+                'buildName'    : $('deploy-name').value
             },
             method: "get",
             onCreate : function() {
@@ -457,6 +502,9 @@ document.observe('xwiki:dom:loaded', function() {
 }
 .question .code {
   line-height: 4em;
+}
+.test-dataset-select {
+  margin-right: 1em;
 }</code>
     </property>
     <property>

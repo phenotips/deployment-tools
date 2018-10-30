@@ -40,8 +40,10 @@
   <content>{{velocity}}
 #if ("$!{request.action}" == "delete" &amp;&amp; "$!{request.buildName}" != "")
   $services.pcTestDeployment.deleteServer("$!{request.buildName}")
+#elseif ("$!{request.action}" == "load-data" &amp;&amp; "$!{request.ip}" != "" &amp;&amp; "$!{request.dataName}" != "")
+  $services.pcTestDeployment.loadTestData("$!{request.ip}", "$!{request.dataName}"))
 #else
-  $services.pcTestDeployment.runDeploymentScript("$!{request.pnBrnachName}", "$!{request.rmBrnachName}", "$!{request.pcBrnachName}", "$!{request.buildName}"))
+  $services.pcTestDeployment.deploy("$!{request.pnBrnachName}", "$!{request.rmBrnachName}", "$!{request.pcBrnachName}", "$!{request.buildName}"))
 #end
 {{/velocity}}</content>
 </xwikidoc>

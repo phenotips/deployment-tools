@@ -76,13 +76,16 @@ public class PCTestDeploymentScriptService implements ScriptService
      * @param pnBrnachName Patient Network GitHub repository branch name (optional, defaults to "master")
      * @param rmBrnachName Remote Matching GitHub repository branch name (optional, defaults to "master")
      * @param pcBrnachName PhenomeCentral GitHub repository branch name (optional, defaults to "master")
+     * @param ptBrnachName PhenoTips GitHub repository branch name (optional, defaults to "master")
      * @param buildName user-defined PhenomeCentral test build name
      *     (optional, defaults to "master" if first 3 parameters are not specified,
      *     or composed of them in a form of "pnBrnachName_rmBrnachName_pcBrnachName")
+     * @param project PhenomeCentral or PhenoTips (optional, defaults to "PhenomeCentral")
      * @return true if the VM has successfully started up
      */
     @SuppressWarnings({ "checkstyle:NPathComplexity", "checkstyle:CyclomaticComplexity" })
-    public boolean deploy(String pnBrnachName, String rmBrnachName, String pcBrnachName, String buildName)
+    public boolean deploy(String pnBrnachName, String rmBrnachName, String pcBrnachName, String ptBrnachName,
+        String buildName, String project)
     {
         try {
             this.logger.error("Running deployment script for branches PN[{}], RM[{}], PC[{}]",
@@ -98,8 +101,14 @@ public class PCTestDeploymentScriptService implements ScriptService
             if (StringUtils.isNotBlank(pcBrnachName)) {
                 scriptArguments = scriptArguments + " --pc " + pcBrnachName;
             }
+            if (StringUtils.isNotBlank(ptBrnachName)) {
+                scriptArguments = scriptArguments + " --pt " + ptBrnachName;
+            }
             if (StringUtils.isNotBlank(buildName)) {
                 scriptArguments = scriptArguments + " --build-name " + buildName;
+            }
+            if (StringUtils.isNotBlank(project)) {
+                scriptArguments = scriptArguments + " --project " + project;
             }
 
             // execute the script, expected return code is 0

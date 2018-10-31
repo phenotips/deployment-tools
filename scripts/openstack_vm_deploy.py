@@ -48,7 +48,10 @@ def script(settings):
         list_servers(conn)
         sys.exit(0)
 
-    # find if there already exists a VM with the given name
+    # find if there already exists a VM with the build name
+    # define custom build name
+    if settings.build_name == DEFAULT_BRANCH_NAME and (settings.pn_branch_name != DEFAULT_BRANCH_NAME or settings.rm_branch_name != DEFAULT_BRANCH_NAME or settings.pc_branch_name != DEFAULT_BRANCH_NAME):
+        settings.build_name = settings.pn_branch_name + '_' + settings.rm_branch_name + '_' + settings.pc_branch_name
     server = conn.compute.find_server(settings.build_name)
 
     # if a VM with the same build name already exists - delete it

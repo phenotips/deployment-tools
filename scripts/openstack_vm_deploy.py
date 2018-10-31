@@ -21,6 +21,7 @@ FLAVOUR = "m2.medium"
 KEYPAIR_NAME = 'PCMain'
 NETWORK_NAME = "TestPC"
 KID_NETWORK_NAME = "Kidnet External"
+EXCLUDE_SERVER_PREFIX = "PC_deployment"
 #####################################################
 
 # script parameters
@@ -45,13 +46,17 @@ def script(settings):
     if settings.action == 'list':
         # openstack server list
         servers_list = conn.compute.servers()
-        logging.info("List: {0}".format(servers_list))
+        logging.info("List: {0}".format(str(servers_list)))
         data = []
         for server in servers_list:
             ipf = ''
-            #logging.info("Listing server : {0}".format(server.name))
             if NETWORK_NAME not in server.addresses.keys():
+                # exclude servers not inthe PC deployment network
                 continue
+            if server.name.startswith(EXCLUDE_SERVER_PREFIX):
+                # exclude the frontend itself, and any other development servers
+                continue
+            logging.info("Listing server : {0}".format(server.name))
             for address in server.addresses[NETWORK_NAME]:
                 if address['OS-EXT-IPS:type'] == 'floating':
                     ipf = address['addr']
@@ -98,10 +103,14 @@ def script(settings):
         # Wait for a server to be in a status='ACTIVE', failures=None, interval=2, wait=120
         # interval – Number of seconds to wait before to consecutive checks. Default to 2.
         # wait – Maximum number of seconds to wait before the change. Default to 120.
-        server = conn.compute.wait_for_server(server, interval=30, wait=240)
+        server = conn.compute.wait_for_server(server, interval=30, wait=600)
     except:
+        logging.info("-- FAILED TO START A VM (timeout?)")
         server = conn.compute.find_server(settings.build_name)
-        logging.info("--STATUS---> {0}".format(server.status))
+        if server:
+            logging.info("-- STATUS: {0}".format(server.status))
+        else:
+            logging.info("-- VM with name {0} not found".format(settings.build_name))
         sys.exit(-3)
 
     #print("ssh -i {key} root@{ip}".format(key=PRIVATE_KEYPAIR_FILE, ip=server.access_ipv4))
@@ -115,7 +124,7 @@ def script(settings):
         logging.error('Error: assiging floating_ip_address {0} failed'.format(fip.floating_ip_address))
         sys.exit(-4)
     else:
-        logging.info("-- FLOATING IP ASSOCIATED --> {0}".format(fip))
+        logging.info("-- FLOATING IP ASSOCIATED: {0}".format(fip))
 
 # Retrieves an un-associated floating ip if available (once that dont have Fixed IP Address), or allocates 1 from pool
 def get_floating_ip(conn):

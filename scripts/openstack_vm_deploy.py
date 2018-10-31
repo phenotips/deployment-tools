@@ -37,10 +37,8 @@ def script(settings):
     logging.info("Initialize and turn on debug openstack logging")
 
     # Connection
-    # https://docs.openstack.org/openstacksdk/latest/user/connection.html
     credentials = get_credentials()
     logging.info("Got credentials {0}".format(credentials))
-    # https://docs.openstack.org/openstacksdk/latest/user/guides/connect.html
     conn = openstack.connect(**credentials)
     logging.info("Connected to OpenStack")
 
@@ -48,10 +46,10 @@ def script(settings):
         list_servers(conn)
         sys.exit(0)
 
-    # find if there already exists a VM with the build name
     # define custom build name
     if settings.build_name == DEFAULT_BRANCH_NAME and (settings.pn_branch_name != DEFAULT_BRANCH_NAME or settings.rm_branch_name != DEFAULT_BRANCH_NAME or settings.pc_branch_name != DEFAULT_BRANCH_NAME):
         settings.build_name = settings.pn_branch_name + '_' + settings.rm_branch_name + '_' + settings.pc_branch_name
+    # find if there already exists a VM with the build name
     server = conn.compute.find_server(settings.build_name)
 
     # if a VM with the same build name already exists - delete it
@@ -68,10 +66,8 @@ def script(settings):
     add_floatingip(conn, server)
 
 def add_floatingip(conn, server):
-    # openstack server add floating ip [build_name] [ip]
     logging.info("Assigning floating IPs..........")
     fip = get_floating_ip(conn)
-    #server.add_floating_ip(address=fip.floating_ip_address)
     retcode = subprocess.call(['openstack', 'server', 'add', 'floating', 'ip', server.name, fip.floating_ip_address])
     if retcode != 0:
         logging.error('Error: assiging floating_ip_address {0} failed'.format(fip.floating_ip_address))
@@ -80,9 +76,6 @@ def add_floatingip(conn, server):
         logging.info("-- FLOATING IP ASSOCIATED: {0}".format(fip))
 
 def create_server(conn, settings):
-    # Get server metadata
-    # server_metadata = conn.compute.get_server_metadata(server).metadata
-
     image = conn.compute.find_image(SNAPSHOT_NAME)
     flavor = conn.compute.find_flavor(FLAVOUR)
     network = conn.network.find_network(NETWORK_NAME)
@@ -145,7 +138,7 @@ def get_floating_ip(conn):
     if fip:
         logging.info('FLOATING IP: {0}'.format(fip))
     else:
-        # Create Floating IP.
+        # Create Floating IP
         fip = conn.network.create_ip(floating_network_id=kid_network.id)
         logging.info("->CREATED FLOATING IP: {0}".format(fip))
     return fip

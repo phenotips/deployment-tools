@@ -100,7 +100,10 @@ def deploy_pc(settings):
 def start_pc(settings):
     # Run PhenomeCentral instance
     logging.info('Starting PhenomeCentral {0} instance ...'.format(settings.build_name))
-    os.chdir(os.path.join(settings.this_build_deploy_dir, os.listdir(settings.this_build_deploy_dir)[0]))
+
+    work_dir = os.path.join(settings.this_build_deploy_dir, os.listdir(settings.this_build_deploy_dir)[0])
+    logging.info('* working directory [{0}]'.format(work_dir))
+    os.chdir(work_dir)
 
     start_filename = './start.sh'
 
@@ -109,18 +112,17 @@ def start_pc(settings):
         os.system("sed -i 's/REM set START_OPTS/set START_OPTS/' start.bat")
         start_filename = 'start.bat'
         # os.system("sed -i 's/PAUSE//' start.bat")
-        retcode = subprocess.Popen([start_filename], shell=True)
+        p = subprocess.Popen([start_filename], shell=True)
     else:
         log_file = open("webapps/phenotips/resources/serverlog.txt", "wb")
-        retcode = subprocess.Popen([start_filename], stdout=log_file, stderr=log_file)
+        p = subprocess.Popen([start_filename], stdout=log_file, stderr=log_file)
 
-    if retcode != 0:
-        logging.error('Error: starting PhenomeCentral {0} instance'.format(settings.build_name))
-    else:
-        logging.info('<------PhenomeCentral STARTED---->')
+    logging.info('<------PhenomeCentral STARTED------>')
 
     # wait until web server initializes and starts listening to the incoming connections
     time.sleep(30)
+
+    logging.info('Sending first request to start PC initialization process...')
 
     # make initial curl call to trigger PhenomeCentral start up (which is longer and on top of web server startup)
     command = ['curl', TRIGGER_INITIALIZATION_UTL]
@@ -225,6 +227,7 @@ def main(args=sys.argv[1:]):
     if settings.start_after_deploy:
         start_pc(settings)
 
+    logging.info('DONE')
 
 if __name__ == '__main__':
     try:

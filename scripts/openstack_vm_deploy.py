@@ -29,6 +29,7 @@ SECURITY_GROUP_NAME = "ingress_cidr_local_tcp_8080"
 SERVER_LIST_FILE_NAME = "server_list.txt"
 DEFAULT_ACTION = 'deploy'
 DEFAULT_BRANCH_NAME = 'master'
+DEFAULT_PROJECT = 'PhenomeCentral'
 
 
 def script(settings):
@@ -86,6 +87,8 @@ def create_server(conn, settings):
     metadatau['pn'] = settings.pn_branch_name
     metadatau['rm'] = settings.rm_branch_name
     metadatau['pc'] = settings.pc_branch_name
+    metadatau['pt'] = settings.pt_branch_name
+    metadatau['pr'] = settings.project
     metadatau['bn'] = settings.build_name
 
     logging.info("Creating a new VM..........")
@@ -188,9 +191,15 @@ def parse_args(args):
     parser.add_argument("--pc", dest='pc_branch_name',
                       default=DEFAULT_BRANCH_NAME,
                       help="branch name for PhenomeCentral repo ('{0}' by default)".format(DEFAULT_BRANCH_NAME))
+    parser.add_argument("--pt", dest='pt_branch_name',
+                      default=DEFAULT_BRANCH_NAME,
+                      help="branch name for PhenoTips repo ('{0}' by default)".format(DEFAULT_BRANCH_NAME))
     parser.add_argument("--build-name", dest='build_name',
                       default=DEFAULT_BRANCH_NAME,
                       help="custom build name (by default '{0}' or '[pn_branch_name]_[rm_branch_name]_[pc_branch_name]') if any of branch names provided)".format(DEFAULT_BRANCH_NAME))
+    parser.add_argument("--project", dest='project',
+                      default=DEFAULT_PROJECT, choices=['PhenoTips', 'PhenomeCentral'],
+                      help="project name, either 'PhenoTips' or 'PhenomeCentral' (by default '{0}')".format(DEFAULT_PROJECT))
     parser.add_argument("--action", dest='action',
                       default=DEFAULT_ACTION,
                       help="action that user intented to do, kill running VM server ('delete'), save list of currently running instances to the 'serever_list.txt' file ('list') in the directory where script is running, or spin a new one (by default '{0}')".format(DEFAULT_ACTION))

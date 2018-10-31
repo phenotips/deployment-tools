@@ -25,11 +25,13 @@ VM_METADATA_URL = "http://169.254.169.254/openstack/2017-02-22/meta_data.json"
 PN_REPOSITORY_NAME = 'patient-network'
 RM_REPOSITORY_NAME = 'remote-matching'
 PC_REPOSITORY_NAME = 'phenomecentral.org'
+PT_REPOSITORY_NAME = 'phenotips'
 
 BUILD_ORDER = [PN_REPOSITORY_NAME, RM_REPOSITORY_NAME, PC_REPOSITORY_NAME]
 
 DEFAULT_BRANCH_NAME = 'master'
 DEFAULT_BUILD_NAME = DEFAULT_BRANCH_NAME
+DEFAULT_PROJECT = 'PhenomeCentral'
 
 PARENT_PHENOTIPS_GIT_URL = 'https://github.com/phenotips/'
 TRIGGER_INITIALIZATION_UTL = 'http://localhost:8080'
@@ -40,10 +42,13 @@ def setup_folders(settings):
     if settings.build_name == DEFAULT_BRANCH_NAME and (settings.pn_branch_name != DEFAULT_BRANCH_NAME or settings.rm_branch_name != DEFAULT_BRANCH_NAME or settings.pc_branch_name != DEFAULT_BRANCH_NAME):
         settings.build_name = settings.pn_branch_name + '_' + settings.rm_branch_name + '_' + settings.pc_branch_name
 
-    settings.pc_distrib_dir = os.path.join(settings.git_dir, 'phenomecentral.org', 'standalone', 'target')
+    if settings.project == DEFAULT_PROJECT:
+        settings.pc_distrib_dir = os.path.join(settings.git_dir, 'phenomecentral.org', 'standalone', 'target')
+    else:
+        settings.pc_distrib_dir = os.path.join(settings.git_dir, 'phenotips', 'distribution', 'standalone', 'target')
 
     settings.this_build_deploy_dir = os.path.join(settings.deploy_dir, settings.build_name)
-    logging.info('PC deployment directory: {0}'.format(settings.this_build_deploy_dir))
+    logging.info('{0} deployment directory: {1}'.format(settings.project, settings.this_build_deploy_dir))
 
     # Wipe GitHub directory for a fresh checkout
     if os.path.isdir(settings.git_dir):
@@ -70,6 +75,9 @@ def build_pc(settings):
         os.chdir(settings.git_dir)
         build_repo(repo_name, settings.repositories[repo_name])
 
+def build_pt(settings):
+    os.chdir(settings.git_dir)
+    build_repo(PT_REPOSITORY_NAME, settings.repositories[PT_REPOSITORY_NAME])
 
 def build_repo(repo_name, repo_branch):
     logging.info('Started building repo {0} ...'.format(repo_name))
@@ -85,21 +93,21 @@ def build_repo(repo_name, repo_branch):
     logging.info('->Finished building repo {0}.'.format(repo_name))
 
 
-def deploy_pc(settings):
-    # extract PhenomeCentral distribution files to the target installation directory
-    logging.info('Started extracting PhenomeCentral distribution files to the target installation directory {0} ...'.format(settings.this_build_deploy_dir))
+def deploy(settings):
+    # extract distribution files to the target installation directory
+    logging.info('Started extracting {0} distribution files to the target installation directory {1} ...'.format(settings.project, settings.this_build_deploy_dir))
     assert os.path.isdir(settings.pc_distrib_dir)
     os.chdir(settings.pc_distrib_dir)
-    retcode = subprocess.call(['unzip', 'phenomecentral-standalone*.zip', '-d', settings.this_build_deploy_dir])
+    dist_filename = settings.project.lower() + '-standalone*.zip'
+    retcode = subprocess.call(['unzip', dist_filename, '-d', settings.this_build_deploy_dir])
     if retcode != 0:
-        logging.error('Error: extracting PhenomeCentral distribution files to the target installation directory {0} failed'.format(settings.this_build_deploy_dir))
+        logging.error('Error: extracting {0} distribution files to the target installation directory {1} failed'.format(settings.project, settings.this_build_deploy_dir))
         sys.exit(-3)
-    logging.info('->Finished extracting PhenomeCentral distribution files.'.format(settings.this_build_deploy_dir))
+    logging.info('->Finished extracting {0} distribution files.'.format(settings.project))
 
-
-def start_pc(settings):
-    # Run PhenomeCentral instance
-    logging.info('Starting PhenomeCentral {0} instance ...'.format(settings.build_name))
+def start_instance(settings):
+    # Run instance
+    logging.info('Starting {0} {1} instance ...'.format(settings.project, settings.build_name))
 
     work_dir = os.path.join(settings.this_build_deploy_dir, os.listdir(settings.this_build_deploy_dir)[0])
     logging.info('* working directory [{0}]'.format(work_dir))
@@ -117,14 +125,14 @@ def start_pc(settings):
         log_file = open("webapps/phenotips/resources/serverlog.txt", "wb")
         p = subprocess.Popen([start_filename], stdout=log_file, stderr=log_file)
 
-    logging.info('<------PhenomeCentral STARTED------>')
+    logging.info('<------{0} STARTED------>'.format(settings.project))
 
     # wait until web server initializes and starts listening to the incoming connections
     time.sleep(30)
 
-    logging.info('Sending first request to start PC initialization process...')
+    logging.info('Sending first request to start {0} initialization process...'.format(settings.project))
 
-    # make initial curl call to trigger PhenomeCentral start up (which is longer and on top of web server startup)
+    # make initial curl call to trigger instance start up (which is longer and on top of web server startup)
     command = ['curl', TRIGGER_INITIALIZATION_UTL]
     retcode = subprocess.call(command)
 
@@ -161,7 +169,7 @@ def setup_logfile(settings):
 
 
 def parse_args(args, vm_metadata):
-    default_parameter_values = {'pn' : DEFAULT_BRANCH_NAME, 'rm' : DEFAULT_BRANCH_NAME, 'pc' : DEFAULT_BRANCH_NAME, 'bn' : DEFAULT_BUILD_NAME}
+    default_parameter_values = {'pn' : DEFAULT_BRANCH_NAME, 'rm' : DEFAULT_BRANCH_NAME, 'pc' : DEFAULT_BRANCH_NAME, 'pt' : DEFAULT_BRANCH_NAME, 'bn' : DEFAULT_BUILD_NAME, 'pr' : DEFAULT_PROJECT}
 
     for param_name in default_parameter_values:
         if param_name in vm_metadata:
@@ -171,6 +179,7 @@ def parse_args(args, vm_metadata):
     pn_read_from_vm = read_from_vm_meta_str if 'pn' in vm_metadata else ""
     rm_read_from_vm = read_from_vm_meta_str if 'rm' in vm_metadata else ""
     pc_read_from_vm = read_from_vm_meta_str if 'pc' in vm_metadata else ""
+    pt_read_from_vm = read_from_vm_meta_str if 'pt' in vm_metadata else ""
 
     parser = ArgumentParser(description='Checks out all the code required to build a fresh PC instance, and then builds and deploys a PC instance.\n\n' +
                                         'Sample usage to build, install and run a pull request form the PN-123 branch: "' +
@@ -187,9 +196,15 @@ def parse_args(args, vm_metadata):
     parser.add_argument("--pc", dest='pc_branch_name',
                       default=default_parameter_values['pc'],
                       help="branch name for PhenomeCentral repo ('{0}' by default".format(default_parameter_values['pc']) + pc_read_from_vm + ")")
+    parser.add_argument("--pt", dest='pt_branch_name',
+                      default=DEFAULT_BRANCH_NAME,
+                      help="branch name for PhenoTips repo ('{0}' by default)".format(default_parameter_values['pt']) + pt_read_from_vm + ")")
     parser.add_argument("--build-name", dest='build_name',
                       default=default_parameter_values['bn'],
                       help="custom build name (by default '{0}' or '[pn_branch_name]_[rm_branch_name]_[pc_branch_name]')".format(default_parameter_values['bn']))
+    parser.add_argument("--project", dest='project',
+                      default=DEFAULT_PROJECT, choices=['PhenoTips', 'PhenomeCentral'],
+                      help="project name, either 'PhenoTips' or 'PhenomeCentral' (by default '{0}')".format(DEFAULT_PROJECT))
     parser.add_argument("--git-dir", dest='git_dir',
                       default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'github'),
                       help="path to the GitHub directory to clone repositories (by default the 'github' folder in the directory from where the script runs)")
@@ -203,6 +218,7 @@ def parse_args(args, vm_metadata):
     args.repositories[PN_REPOSITORY_NAME] = args.pn_branch_name
     args.repositories[RM_REPOSITORY_NAME] = args.rm_branch_name
     args.repositories[PC_REPOSITORY_NAME] = args.pc_branch_name
+    args.repositories[PT_REPOSITORY_NAME] = args.pt_branch_name
 
     return args
 
@@ -221,11 +237,15 @@ def main(args=sys.argv[1:]):
 
     setup_folders(settings)
 
-    build_pc(settings)
-    deploy_pc(settings)
+    if settings.project == DEFAULT_PROJECT:
+        build_pc(settings)
+    else:
+        build_pt(settings)
+
+    deploy(settings)
 
     if settings.start_after_deploy:
-        start_pc(settings)
+        start_instance(settings)
 
     logging.info('DONE')
 

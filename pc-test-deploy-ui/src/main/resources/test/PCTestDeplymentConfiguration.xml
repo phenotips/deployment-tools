@@ -43,7 +43,16 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
 ##
 ##
 {{html}}
-Please, select branches for the following GitHub repositories for a PhenomeCentral test build deployment.
+Please, select project and branches for the following GitHub repositories for test build deployment.
+&lt;div class="projects"&gt;
+  &lt;label&gt;
+    &lt;input value="PhenomeCentral" name="project" type="radio" checked="checked"&gt;PhenomeCentral
+  &lt;/label&gt;
+  &lt;label&gt;
+    &lt;input value="PhenoTips" name="project" type="radio"&gt;PhenoTips
+  &lt;/label&gt;
+&lt;/div&gt;
+
 &lt;div id="deploy-content"&gt;&lt;/div&gt;
 {{/html}}
 ##
@@ -170,10 +179,11 @@ var BASE_GITREPO_URL = 'https://github.com/phenotips/';
 var SERVICE_URL = new XWiki.Document('PCTestDeploymentService', 'PhenomeCentral').getURL('get');
 
 var repos = [
+            'phenotips',
             'patient-network',
             'remote-matching',
             'phenomecentral.org'
-           ];
+            ];
 
 var selects = {};
 
@@ -335,10 +345,12 @@ var updateUI = function () {
     button.observe('click', function (event) {
         new Ajax.Request(SERVICE_URL, {
             parameters: {
-                'pnBrnachName' : $('repo-select-patient-network').value,
-                'rmBrnachName' : $('repo-select-remote-matching').value,
-                'pcBrnachName' : $('repo-select-phenomecentral.org').value,
-                'buildName'    : $('deploy-name').value
+                'pnBranchName' : $('repo-select-patient-network').value,
+                'rmBranchName' : $('repo-select-remote-matching').value,
+                'pcBranchName' : $('repo-select-phenomecentral.org').value,
+                'ptBranchName' : $('repo-select-phenotips').value,
+                'buildName'    : $('deploy-name').value,
+                'project'      : $$('input[name="project"]:checked')[0].value
             },
             method: "get",
             onCreate : function() {
@@ -509,6 +521,11 @@ document.observe('xwiki:dom:loaded', function() {
 }
 .test-dataset-select {
   margin-right: 1em;
+}
+.projects {
+  font-weight: 700;
+  margin: 1em 11em;
+  font-weight: 700;
 }</code>
     </property>
     <property>

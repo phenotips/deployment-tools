@@ -43,7 +43,7 @@
 #elseif ("$!{request.action}" == "load-data" &amp;&amp; "$!{request.ip}" != "" &amp;&amp; "$!{request.dataName}" != "")
   $services.pcTestDeployment.loadTestData("$!{request.ip}", "$!{request.dataName}"))
 #else
-  $services.pcTestDeployment.deploy("$!{request.pnBrnachName}", "$!{request.rmBrnachName}", "$!{request.pcBrnachName}", "$!{request.buildName}"))
+  $services.pcTestDeployment.deploy("$!{request.pnBranchName}", "$!{request.rmBranchName}", "$!{request.pcBranchName}", "$!{request.ptBranchName}", "$!{request.buildName}", "$!{request.project}"))
 #end
 {{/velocity}}</content>
 </xwikidoc>

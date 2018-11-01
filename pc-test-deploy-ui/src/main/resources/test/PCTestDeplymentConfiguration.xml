@@ -267,6 +267,7 @@ var attachServerDeleteListeners = function () {
                   },
                   onSuccess: function(response) {
                       console.log('Success');
+                      item.up('tr').hide();
                   },
                   onComplete : function() {
                       console.log('Complete');
@@ -319,9 +320,32 @@ var attachLoadDataListeners = function () {
     });
 }
 
+
+var selectProject = function(name) {
+    if (name == "PhenoTips") {
+        $('repo-select-phenotips').up().show();
+        $('repo-select-patient-network').up().hide();
+        $('repo-select-remote-matching').up().hide();
+        $('repo-select-phenomecentral.org').up().hide();
+    } else {
+        $('repo-select-phenotips').up().hide();
+        $('repo-select-patient-network').up().show();
+        $('repo-select-remote-matching').up().show();
+        $('repo-select-phenomecentral.org').up().show();
+    }
+}
+
+var attachProjectSelectionListeners = function () {
+    $$('input[name="project"]').invoke('observe', 'click', function(event) {
+        var item = event.element();
+        selectProject(item.value);
+    });
+}
+
 var attachButtonHandlers  = function () {
     attachServerDeleteListeners();
     attachLoadDataListeners();
+    attachProjectSelectionListeners();
 }
 
 var updateUI = function () {
@@ -337,12 +361,17 @@ var updateUI = function () {
 
     // var button = new Element('input', {'class' : 'button', 'type' : 'button', 'id':'deploy', 'value':'Deploy'});
     var button = new Element('span', {'class' : 'buttonwrapper'});
-    var buttonA = new Element('a', {'class' : 'button load-data', 'id':'deploy', 'href' : '#'})
+    var buttonA = new Element('a', {'class' : 'button deploy-button', 'id':'deploy', 'href' : '#'})
                                    .insert(new Element('span', {'class' : 'fa fa-upload'}).update(" "))
                                    .insert(new Element('span').update("Deploy"));
     container.insert(button.insert(buttonA));
 
-    button.observe('click', function (event) {
+    var deploying = false;
+
+    var onDeploy = function (event) {
+        if (deploying) {
+            return;
+        }
         new Ajax.Request(SERVICE_URL, {
             parameters: {
                 'pnBranchName' : $('repo-select-patient-network').value,
@@ -354,16 +383,44 @@ var updateUI = function () {
             },
             method: "get",
             onCreate : function() {
+                deploying = true;
                 console.log('Sending');
+                $('deploy').addClassName("disabled-button");
+                behavior = {};
+                var dialogParameters = {
+                      confirmationText: "A request to start a new VM will be sent - see deployment log for progress details",
+                      yesButtonText: "OK",
+                      noButtonText: ""
+                };
+                var actionPerformedDialog = new XWiki.widgets.ConfirmationBox(behavior, dialogParameters);
+                //setTimeout(function() { window.open("../resources/latest_deploy.log");}, 500);
             },
             onSuccess: function(response) {
                 console.log('Success');
+                behavior = {
+                    onYes: function() {
+                        $('xwikimaincontainerinner').hide();
+                        location.reload();
+                    }
+                };
+                var dialogParameters = {
+                      confirmationText: "A new test VM has been deployed. The page will be refreshed now to reflect the changed. ",
+                      yesButtonText: "OK",
+                      noButtonText: ""
+                };
+                var actionPerformedDialog = new XWiki.widgets.ConfirmationBox(behavior, dialogParameters);
             },
             onComplete : function() {
                 console.log('Complete');
+                $('deploy').removeClassName("disabled-button");
+                deploying = false;
             }
         });
-    });
+    };
+
+    button.observe('click', onDeploy);
+
+    selectProject("PhenomeCentral");
 }
 
 document.observe('xwiki:dom:loaded', function() {
@@ -526,7 +583,15 @@ document.observe('xwiki:dom:loaded', function() {
   font-weight: 700;
   margin: 1em 11em;
   font-weight: 700;
-}</code>
+}
+.disabled-button {
+  background-color: #999 !important;
+  background-image: none !important;
+  border: 1px solid #CCC !important;
+  text-shadow: none !important;
+  pointer-events: none !important;
+}
+</code>
     </property>
     <property>
       <contentType>CSS</contentType>

@@ -33,6 +33,7 @@ import javax.inject.Singleton;
 
 import org.apache.commons.lang3.StringUtils;
 import org.json.JSONArray;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 
 /**
@@ -120,11 +121,11 @@ public class PCTestDeploymentScriptService implements ScriptService
     }
 
     /**
-     * List OpenStack server instances in the JSON file.
+     * List OpenStack server instances and resources usage stats in the JSON format in txt file.
      *
      * @return JSON array with server info or null if fetching is unsuccessful.
      */
-    public JSONArray listServers()
+    public JSONObject listServers()
     {
         try {
             this.logger.error("Getting the list of already running VMs");
@@ -137,7 +138,7 @@ public class PCTestDeploymentScriptService implements ScriptService
 
                 String serversInfo = readFile(this.serversFile);
 
-                return new JSONArray(serversInfo);
+                return new JSONObject(serversInfo);
             }
         } catch (FileNotFoundException ex) {
             this.logger.error("Error: script did not generate serverlist file [{}] or the file could not be found",

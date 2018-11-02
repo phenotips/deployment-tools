@@ -226,7 +226,7 @@ var generateBranchSelect = function (repo, jsonArray) {
 var requestReposInfo = function () {
   var requested = 0;
   repos.each(function (repo) {
-    var xhr = createCORSRequest('GET', BASE_API_URL + repo + '/branches');
+    var xhr = createCORSRequest('GET', BASE_API_URL + repo + '/branches?per_page=100');
     if (!xhr) { return; } // CORS not supported
     // Response handlers
     xhr.onload = function() {

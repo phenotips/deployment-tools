@@ -92,6 +92,10 @@ Please, select project and branches for the following GitHub repositories for te
   |(% class="logs" %)#if($obj.get('status') == "active"){{html clean="false"}}&lt;a href="http://$escapetool.xml($obj.get('ip')):8080/resources/serverlog.txt" target="_blank">logs&lt;/a&gt;{{/html}}#end##
   |(% class="action-delete" %){{html clean="false"}}&lt;span class="buttonwrapper"&gt;&lt;a class="button delete-server" href="$obj.get('name')"&gt;&lt;span class="fa fa-trash"&gt; &lt;/span&gt;&lt;span&gt;Delete&lt;/span&gt;&lt;/a&gt;&lt;/span&gt;{{/html}}
 #end
+
+Last deployment {{html clean="false"}}&lt;a target="_blank" href="../resources/latest_deploy.log"&gt;log&lt;/a&gt;{{/html}}
+Last data upload {{html clean="false"}}&lt;a target="_blank" href="../resources/latest_data_upload.log"&gt;log&lt;/a&gt;{{/html}}
+Frontend (this) server {{html clean="false"}}&lt;a target="_blank" href="../resources/serverlog.txt"&gt;log&lt;/a&gt;{{/html}}
 {{/velocity}}</content>
   <object>
     <name>PhenomeCentral.PCTestDeplymentConfiguration</name>

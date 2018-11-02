@@ -11,7 +11,7 @@ import logging
 import openstack
 import subprocess
 import traceback
-#from openstack.cloud import exc
+from novaclient import client
 
 #####################################################
 # OpenStack parameters
@@ -23,6 +23,7 @@ NETWORK_NAME = "TestPC"
 KID_NETWORK_NAME = "Kidnet External"
 EXCLUDE_SERVER_PREFIX = "PC_deployment"
 SECURITY_GROUP_NAME = "ingress_cidr_local_tcp_8080"
+OS_TENANT_NAME="HSC_CCM_PhenoTips"
 #####################################################
 
 # script parameters
@@ -117,8 +118,9 @@ def list_servers(conn):
     # openstack server list
     servers_list = conn.compute.servers()
     logging.info("List: {0}".format(str(servers_list)))
-    data = []
+    data = {'servers' : [], 'usage' : {}}
     for server in servers_list:
+        #logging.info(server.to_dict())
         ipf = ''
         if NETWORK_NAME not in server.addresses.keys():
             # exclude servers not inthe PC deployment network
@@ -130,7 +132,16 @@ def list_servers(conn):
         for address in server.addresses[NETWORK_NAME]:
             if address['OS-EXT-IPS:type'] == 'floating':
                 ipf = address['addr']
-        data.append({'id' : server.id, 'name' : server.name, 'ip' : ipf, 'created' : server.created_at, 'status' : server.vm_state, 'metadata' : server.metadata})
+        data['servers'].append({'id' : server.id, 'name' : server.name, 'ip' : ipf, 'created' : server.created_at, 'status' : server.vm_state, 'metadata' : server.metadata})
+
+    # Get CPU and memory usage stats via nova
+    credentials = get_credentials()
+    credentials['version'] = 2
+    nova = client.Client(**credentials)
+    logging.info("Authorised with nova")
+    logging.info(nova.limits.get("HSC_CCM_PhenoTips").to_dict())
+    data['usage'] = nova.limits.get("HSC_CCM_PhenoTips").to_dict()
+
     print(data, file=open(SERVER_LIST_FILE_NAME, "w"))
 
 # Retrieves an un-associated floating ip if available (once that dont have Fixed IP Address), or allocates 1 from pool
@@ -158,6 +169,8 @@ def get_credentials():
     d['project_name'] = os.environ['OS_PROJECT_NAME']
     d['region_name'] = os.environ['OS_REGION_NAME']
     d['password'] = os.environ['OS_PASSWORD']
+    d['user_domain_name'] = os.environ['OS_USER_DOMAIN_NAME']
+    d['project_domain_name'] = os.environ['OS_PROJECT_DOMAIN_NAME']
     return d
 
 def setup_logfile(settings):

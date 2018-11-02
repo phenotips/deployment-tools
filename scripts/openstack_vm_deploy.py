@@ -22,7 +22,7 @@ KEYPAIR_NAME = 'PCMain'
 NETWORK_NAME = "TestPC"
 KID_NETWORK_NAME = "Kidnet External"
 EXCLUDE_SERVER_PREFIX = "PC_deployment"
-SECURITY_GROUP_NAME = "ingress_cidr_local_tcp_8080"
+SECURITY_GROUPS = ["default", "ingress_cidr_local_tcp_8080","ingress_cidr_local_tcp_8090"]
 OS_TENANT_NAME="HSC_CCM_PhenoTips"
 #####################################################
 
@@ -82,7 +82,14 @@ def create_server(conn, settings):
     flavor = conn.compute.find_flavor(FLAVOUR)
     network = conn.network.find_network(NETWORK_NAME)
     keypair = conn.compute.find_keypair(KEYPAIR_NAME)
-    sgroup = conn.network.find_security_group(SECURITY_GROUP_NAME)
+    sgroups = []
+    for group in SECURITY_GROUPS:
+        sgroup = conn.network.find_security_group(group)
+        if sgroup is not None:
+            sgroups.append({"name": sgroup.name})
+        else:
+            logging.error("Security group {0} not found".format(group))
+            # keep going, this is a minor error
 
     metadatau = {}
     metadatau['pn'] = settings.pn_branch_name
@@ -97,7 +104,7 @@ def create_server(conn, settings):
     try:
         server = conn.compute.create_server(
             name=settings.build_name, image_id=image.id, flavor_id=flavor.id,
-            networks=[{"uuid": network.id}], security_groups=[{"name": sgroup.name}],
+            networks=[{"uuid": network.id}], security_groups=sgroups,
             key_name=keypair.name, metadata=metadatau)
 
         # Wait for a server to be in a status='ACTIVE'

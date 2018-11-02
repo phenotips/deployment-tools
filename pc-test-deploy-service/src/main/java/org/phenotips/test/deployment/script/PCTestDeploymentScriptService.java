@@ -189,7 +189,7 @@ public class PCTestDeploymentScriptService implements ScriptService
                 return false;
             }
 
-            String scriptArguments = "--action upload-dataset --ip " + ip + " --data-name " + dataName;
+            String scriptArguments = " --action upload-dataset --ip " + ip + " --dataset-name " + dataName;
 
             // execute the script, expected return code is 0
             return executeScript(this.scriptLoadDataFile, scriptArguments, 0);

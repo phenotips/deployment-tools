@@ -23,8 +23,10 @@ export OS_PROJECT_ID=$( get_parameter project_id )
 export OS_PROJECT_NAME=$( get_parameter project_name )
 export OS_USER_DOMAIN_NAME=$( get_parameter user_domain_name )
 if [ -z "$OS_USER_DOMAIN_NAME" ]; then unset OS_USER_DOMAIN_NAME; fi
-export OS_PROJECT_DOMAIN_ID=$( get_parameter project_domain_name )
+export OS_PROJECT_DOMAIN_ID=$( get_parameter project_domain_id )
 if [ -z "$OS_PROJECT_DOMAIN_ID" ]; then unset OS_PROJECT_DOMAIN_ID; fi
+export OS_PROJECT_DOMAIN_NAME=$( get_parameter project_domain_name )
+if [ -z "$OS_PROJECT_DOMAIN_NAME" ]; then unset OS_PROJECT_DOMAIN_NAME; fi
 # unset v2.0 items in case set
 unset OS_TENANT_ID
 unset OS_TENANT_NAME

@@ -3,6 +3,7 @@
 username: phenotips
 password: <password in plaintext goes here>
 
+project_domain_id: default
 project_domain_name: default
 project_id: 5d4f394aa6dd4412b0988ac267771584
 project_name: HSC_CCM_PhenoTips

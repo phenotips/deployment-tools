@@ -99,17 +99,16 @@ def create_server(conn, settings):
             networks=[{"uuid": network.id}], security_groups=[{"name": sgroup.name}],
             key_name=keypair.name, metadata=metadatau)
 
-        # Wait for a server to be in a status='ACTIVE', failures=None, interval=2, wait=120
-        # interval – Number of seconds to wait before to consecutive checks. Default to 2.
-        # wait – Maximum number of seconds to wait before the change. Default to 120.
-        server = conn.compute.wait_for_server(server, interval=30, wait=600)
+        # Wait for a server to be in a status='ACTIVE'
+        # interval - Number of seconds to wait before to consecutive checks. Default to 2.
+        # wait - Maximum number of seconds to wait before the change. Default to 120.
+        server = conn.compute.wait_for_server(server, interval=30, wait=1200)
         return server
     except:
         logging.info("-- FAILED TO START A VM (timeout?)")
         server = conn.compute.find_server(settings.build_name)
         if server:
             logging.info("-- STATUS: {0}".format(server.status))
-            return server
         else:
             logging.info("-- VM with name {0} not found".format(settings.build_name))
         sys.exit(-3)
@@ -164,20 +163,32 @@ def get_credentials():
 def setup_logfile(settings):
     if settings.action != 'deploy':
         logname = settings.action
+        web_accessible_log_file = None
     else:
         logname = settings.build_name
+        web_accessible_log_file = 'webapps/phenotips/resources/latest_deploy.log'
 
-    # Wipe out previous log file with the same deployment name if exists
-    open('pc_deploy_{0}.log'.format(logname), 'w').close()
+    main_log_file = 'pc_openstack_{0}.log'.format(logname)
 
     format_string = '%(levelname)s: %(asctime)s: %(message)s'
-    logging.basicConfig(filename='pc_deploy_{0}.log'.format(logname), level=logging.INFO, format=format_string)
+
+    # wipe out existing log files with the same name if exists
+    open(main_log_file, 'w').close()
+    # setup logging
+    logging.basicConfig(filename=main_log_file, level=logging.INFO, format=format_string)
 
     # clone output to console
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
     console.setFormatter(logging.Formatter('[SCRIPT] %(levelname)s: %(message)s'))
     logging.getLogger('').addHandler(console)
+
+    if web_accessible_log_file is not None:
+        open(web_accessible_log_file, 'w').close()
+        # clone output to "latest log" file
+        web_accessible_log = logging.FileHandler(web_accessible_log_file)
+        web_accessible_log.setFormatter(logging.Formatter(format_string))
+        logging.getLogger('').addHandler(web_accessible_log)
 
 def parse_args(args):
     from argparse import ArgumentParser

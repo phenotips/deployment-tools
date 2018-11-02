@@ -275,8 +275,10 @@ def import_xar_files(session, full_file_name, xar_file_name):
 def setup_logfile(settings):
     if settings.action == 'list-datasets':
         log_name = "dataset_list.log"
+        web_accessible_log_file = None
     else:
         log_name = "upload_data.log";
+        web_accessible_log_file = 'webapps/phenotips/resources/latest_data_upload.log'
 
     # Wipe out previous log file with the same deployment name if exists
     open(log_name, 'w').close()
@@ -289,6 +291,13 @@ def setup_logfile(settings):
     console.setLevel(logging.INFO)
     console.setFormatter(logging.Formatter('[SCRIPT] %(levelname)s: %(message)s'))
     logging.getLogger('').addHandler(console)
+
+    if web_accessible_log_file is not None:
+        open(web_accessible_log_file, 'w').close()
+        # clone output to "latest log" file
+        web_accessible_log = logging.FileHandler(web_accessible_log_file)
+        web_accessible_log.setFormatter(logging.Formatter(format_string))
+        logging.getLogger('').addHandler(web_accessible_log)
 
 def parse_args(args):
     parser = ArgumentParser()

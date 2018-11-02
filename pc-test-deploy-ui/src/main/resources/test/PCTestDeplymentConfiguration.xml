@@ -70,6 +70,7 @@ Please, select project and branches for the following GitHub repositories for te
 ##=========================================
 ## TABLE BODY
 #set ($serverList = $services.pcTestDeployment.listServers())
+#set ($serverList = $serverList.get('servers'))
 #set ($datasetList = $services.pcTestDeployment.listTestDatasets())
 #foreach ($obj in $serverList)
   #set($beginTime = $obj.get('created').replace('T',' ').replace('Z',''))

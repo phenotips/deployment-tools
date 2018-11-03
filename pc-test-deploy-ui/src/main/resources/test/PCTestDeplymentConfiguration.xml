@@ -41,6 +41,9 @@
 $xwiki.jsx.use('PhenomeCentral.PCTestDeplymentConfiguration')##
 $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
 ##
+#set ($serverList = $services.pcTestDeployment.listServers())
+#set ($usage = $serverList.get('usage').get('absolute'))
+##
 ##
 {{html}}
 Please, select project and branches for the following GitHub repositories for test build deployment.
@@ -52,8 +55,26 @@ Please, select project and branches for the following GitHub repositories for te
     &lt;input value="PhenoTips" name="project" type="radio"&gt;PhenoTips
   &lt;/label&gt;
 &lt;/div&gt;
-
 &lt;div id="deploy-content"&gt;&lt;/div&gt;
+{{/html}}
+== OpenStack resources usage summary ==
+{{html}}
+&lt;input type='hidden' id='usage' value='$usage.toString()'/&gt;
+&lt;div class="chart"&gt;
+  &lt;canvas id="cpu" width="70" height="70"&gt;&lt;/canvas&gt;
+  &lt;div&gt;VCPUs&lt;/div&gt;
+  &lt;div&gt;Used $usage.get('totalCoresUsed') of $usage.get('maxTotalCores')&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="chart"&gt;
+  &lt;canvas id="ram" width="70" height="70"&gt;&lt;/canvas&gt;
+  &lt;div&gt;RAM&lt;/div&gt;
+  &lt;div&gt;Used $usage.get('totalRAMUsed')MB of $usage.get('maxTotalRAMSize')MB&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="chart"&gt;
+  &lt;canvas id="inst" width="70" height="70"&gt;&lt;/canvas&gt;
+  &lt;div&gt;Instances&lt;/div&gt;
+  &lt;div&gt;Used $usage.get('totalInstancesUsed') of $usage.get('maxTotalInstances')&lt;/div&gt;
+&lt;/div&gt;
 {{/html}}
 ##
 ##
@@ -69,7 +90,6 @@ Please, select project and branches for the following GitHub repositories for te
 ## Get list of running OpenStack VM servers
 ##=========================================
 ## TABLE BODY
-#set ($serverList = $services.pcTestDeployment.listServers())
 #set ($serverList = $serverList.get('servers'))
 #set ($datasetList = $services.pcTestDeployment.listTestDatasets())
 #foreach ($obj in $serverList)
@@ -428,9 +448,46 @@ var updateUI = function () {
     selectProject("PhenomeCentral");
 }
 
+var drawPiCharts = function () {
+    var usage = JSON.parse($('usage').value);
+    var cpuMax = usage.maxTotalCores;
+    var cpuUsed = usage.totalCoresUsed;
+    var ramMax = usage.maxTotalRAMSize;
+    var ramUsed = usage.totalRAMUsed;
+    var instMax = usage.maxTotalInstances;
+    var instUsed = usage.totalInstancesUsed;
+    var stats = {'cpu'  : [cpuMax - cpuUsed, cpuUsed],
+                 'ram'  : [ramMax - ramUsed, ramUsed],
+                 'inst' : [instMax - instUsed, instUsed]};
+    var color = {'cpu'  : ["#ddd", "#FF8C00"],
+                 'ram'  : ["#ddd", "#428bca"],
+                 'inst' : ["#ddd", "#f0ad4e"]};
+    var totals = {'cpu'  : cpuMax, 'ram'  : ramMax, 'inst' : instMax};
+
+    $$('canvas').each( function(canvas) {
+        var ctx = canvas.getContext("2d");
+        var data = stats[canvas.id];
+        var colors = color[canvas.id];
+        var center = [canvas.width / 2, canvas.height / 2];
+        var radius = Math.min(canvas.width, canvas.height) / 2;
+        var lastPosition = 60, total = totals[canvas.id];
+
+        for (var i = 0; i &lt; data.length; i++) {
+            ctx.fillStyle = colors[i];
+            ctx.beginPath();
+            ctx.moveTo(center[0],center[1]);
+            ctx.arc(center[0],center[1],radius,lastPosition,lastPosition+(Math.PI*2*(data[i]/total)),false);
+            ctx.lineTo(center[0],center[1]);
+            ctx.fill();
+            lastPosition += Math.PI*2*(data[i]/total);
+        }
+    });
+}
+
 document.observe('xwiki:dom:loaded', function() {
     requestReposInfo();
     attachButtonHandlers();
+    drawPiCharts();
 });</code>
     </property>
     <property>
@@ -596,7 +653,12 @@ document.observe('xwiki:dom:loaded', function() {
   text-shadow: none !important;
   pointer-events: none !important;
 }
-</code>
+.chart {
+  display: inline-block;
+  text-align: center;
+  margin: 1em;
+  font-size: 12px;
+}</code>
     </property>
     <property>
       <contentType>CSS</contentType>

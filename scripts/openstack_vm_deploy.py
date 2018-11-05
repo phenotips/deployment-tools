@@ -17,7 +17,7 @@ from novaclient import client
 # OpenStack parameters
 #####################################################
 SNAPSHOT_NAME = "PC_deployment_base"
-FLAVOUR = "m2.medium"
+FLAVOR = "m2.medium"
 KEYPAIR_NAME = 'PCMain'
 NETWORK_NAME = "TestPC"
 KID_NETWORK_NAME = "Kidnet External"
@@ -79,7 +79,7 @@ def add_floatingip(conn, server):
 
 def create_server(conn, settings):
     image = conn.compute.find_image(SNAPSHOT_NAME)
-    flavor = conn.compute.find_flavor(FLAVOUR)
+    flavor = conn.compute.find_flavor(FLAVOR)
     network = conn.network.find_network(NETWORK_NAME)
     keypair = conn.compute.find_keypair(KEYPAIR_NAME)
     sgroups = []
@@ -146,8 +146,19 @@ def list_servers(conn):
     credentials['version'] = 2
     nova = client.Client(**credentials)
     logging.info("Authorised with nova")
-    logging.info(nova.limits.get("HSC_CCM_PhenoTips").to_dict())
-    data['usage'] = nova.limits.get("HSC_CCM_PhenoTips").to_dict()
+    usage = nova.limits.get("HSC_CCM_PhenoTips").to_dict()
+    logging.info("Got usage info")
+    logging.info(usage)
+    data['usage'] = usage['absolute']
+    data['usage']['totalRAMUsed'] = round(data['usage']['totalRAMUsed'] / 1024)
+    data['usage']['maxTotalRAMSize'] = round(data['usage']['maxTotalRAMSize'] / 1024)
+
+    # Add flavor required VCPUs number and RAM to spin one more server
+    flavor = conn.compute.find_flavor(FLAVOR)
+    flavor = nova.flavors.get(flavor.id)
+    data['usage']['requiredRAM'] = round(flavor.ram / 1024)
+    data['usage']['requiredCores'] = flavor.vcpus
+    data['usage']['requiredDisc'] = flavor.disk
 
     print(data, file=open(SERVER_LIST_FILE_NAME, "w"))
 

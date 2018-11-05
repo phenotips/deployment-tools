@@ -93,11 +93,14 @@ def upload_data(settings):
     #copy_processed_VCFs()
 
     # Call patient reindexing because Solr does not reindex when XAR is imported
-    reindex_patients(session)
+    reindex_patients(session, settings)
 
-def reindex_patients(session):
+    logging.info('Finished uploading data {0} to server {1}'.format(settings.dataset_name, settings.server_ip))
+
+def reindex_patients(session, settings):
     logging.info('Reindexing patients...')
-    req = session.get(PATIENTS_REINDEX_REST_URL)
+    reindex_rest_url = compose_url(settings, PATIENTS_REINDEX_REST_URL)
+    req = session.get(reindex_rest_url)
     if req.status_code in [200, 201]:
         logging.info('Reindexed patients successfully')
     else:
@@ -236,7 +239,8 @@ def upload_xar(settings, session, xar_file_name):
             'xredirect': '/import/XWiki/XWikiPreferences?editor=globaladmin&section=Import',
             'form_token': form_token_match.group(1)} )
 
-    req = session.post(XAR_UPLOAD_URL, data=m_enc, headers={'Content-Type': m_enc.content_type}, allow_redirects=False)
+    xar_upload_url = compose_url(settings, XAR_UPLOAD_URL)
+    req = session.post(xar_upload_url, data=m_enc, headers={'Content-Type': m_enc.content_type}, allow_redirects=False)
 
     #print("REQ headers: ", req.request.headers)
     #print("REQ body:", req.request.body)
@@ -244,12 +248,12 @@ def upload_xar(settings, session, xar_file_name):
 
     if req.status_code in [200, 201, 302]:
         logging.info('* uploaded xar file: {0}'.format(full_file_name))
-        import_xar_files(session, full_file_name, xar_file_name)
+        import_xar_files(settings, session, full_file_name, xar_file_name)
     else:
         logging.error('Unexpected response ({0}) from uploading XAR file {1}'.format(req.status_code, filename))
         sys.exit(-7)
 
-def import_xar_files(session, full_file_name, xar_file_name):
+def import_xar_files(settings, session, full_file_name, xar_file_name):
     logging.info('Importing documents from an uploaded XAR file...')
 
     payload = 'editor=globaladmin&section=Import&action=import&name=' + xar_file_name + '&historyStrategy=replace&importAsBackup=false&ajax=1'
@@ -262,7 +266,8 @@ def import_xar_files(session, full_file_name, xar_file_name):
         payload = payload + '&language_' + name + '=&pages=' + name
 
     headers = {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'}
-    req = session.post(XAR_IMPORT_URL + payload, headers=headers)
+    xar_import_url = compose_url(settings, XAR_IMPORT_URL)
+    req = session.post(xar_import_url + payload, headers=headers)
     if req.status_code in [200, 201]:
         logging.info('Imported XWiki documents from XAR file')
     else:

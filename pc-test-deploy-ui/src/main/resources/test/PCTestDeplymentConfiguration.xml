@@ -42,23 +42,44 @@ $xwiki.jsx.use('PhenomeCentral.PCTestDeplymentConfiguration')##
 $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
 ##
 #set ($serverList = $services.pcTestDeployment.listServers())
-#set ($usage = $serverList.get('usage').get('absolute'))
+#set ($message = '')
+#set ($usage = $serverList.get('usage'))
+#set ($cpuLeft = $usage.get('maxTotalCores') - $usage.get('totalCoresUsed'))
+#if ($cpuLeft &lt; $usage.get('requiredCores'))
+  #set ($message = "Less than $usage.get('requiredCores') virtual CPUs are free. ")
+#end
+#set ($ramLeft = $usage.get('maxTotalRAMSize') - $usage.get('totalRAMUsed'))
+#if ($ramLeft &lt; $usage.get('requiredRAM'))
+  #set ($message = $message + "Less than $usage.get('requiredRAM')GB of RAM are free. ")
+#end
+#set ($instLeft = $usage.get('maxTotalInstances') - $usage.get('totalInstancesUsed'))
+#if ($instLeft == 0)
+  #set ($message = $message + "OpenStack reached the maximum in number of running instances.")
+#end
 ##
 ##
 {{html}}
-Please, select project and branches for the following GitHub repositories for test build deployment.
-&lt;div class="projects"&gt;
-  &lt;label&gt;
-    &lt;input value="PhenomeCentral" name="project" type="radio" checked="checked"&gt;PhenomeCentral
-  &lt;/label&gt;
-  &lt;label&gt;
-    &lt;input value="PhenoTips" name="project" type="radio"&gt;PhenoTips
-  &lt;/label&gt;
-&lt;/div&gt;
-&lt;div id="deploy-content"&gt;&lt;/div&gt;
-{{/html}}
-== OpenStack resources usage summary ==
-{{html}}
+#if ($message == '')
+  Please, select project and corresponding branches for test build deployment.
+  &lt;div class="projects"&gt;
+    &lt;label&gt;
+      &lt;input value="PhenomeCentral" name="project" type="radio" checked="checked"&gt;&lt;a href="http://playground/phenomecentral.org" target="_blank"&gt;PhenomeCentral&lt;/a&gt;
+    &lt;/label&gt;
+    &lt;label&gt;
+      &lt;input value="PhenoTips" name="project" type="radio"&gt;&lt;a href="http://phenotips.org" target="_blank"&gt;PhenoTips&lt;/a&gt;
+    &lt;/label&gt;
+  &lt;/div&gt;
+##
+  &lt;div id="deploy-content"&gt;&lt;/div&gt;
+#end
+##
+&lt;div id="stats-content"&gt;
+#if ($message != '')
+  &lt;div class="box warningmessage"&gt;There is not enough OpenStack resources for starting a new instance. &lt;span id="limit-message"&gt;$message&lt;/span&gt; To alocate more space please, delete the unused running servers.&lt;/div&gt;
+#else
+  #set ($inst = $mathtool.min($instLeft, $mathtool.idiv($ramLeft,8), $mathtool.idiv($cpuLeft,2)))
+  &lt;div class="box infomessage"&gt;There is enough space to run $inst more instances.&lt;/div&gt;
+#end
 &lt;input type='hidden' id='usage' value='$usage.toString()'/&gt;
 &lt;div class="chart"&gt;
   &lt;canvas id="cpu" width="70" height="70"&gt;&lt;/canvas&gt;
@@ -68,17 +89,19 @@ Please, select project and branches for the following GitHub repositories for te
 &lt;div class="chart"&gt;
   &lt;canvas id="ram" width="70" height="70"&gt;&lt;/canvas&gt;
   &lt;div&gt;RAM&lt;/div&gt;
-  &lt;div&gt;Used $usage.get('totalRAMUsed')MB of $usage.get('maxTotalRAMSize')MB&lt;/div&gt;
+  &lt;div&gt;Used $usage.get('totalRAMUsed')GB of $usage.get('maxTotalRAMSize')GB&lt;/div&gt;
 &lt;/div&gt;
 &lt;div class="chart"&gt;
   &lt;canvas id="inst" width="70" height="70"&gt;&lt;/canvas&gt;
   &lt;div&gt;Instances&lt;/div&gt;
   &lt;div&gt;Used $usage.get('totalInstancesUsed') of $usage.get('maxTotalInstances')&lt;/div&gt;
 &lt;/div&gt;
+&lt;/div&gt;
 {{/html}}
 ##
 ##
 == OpenStack PC running test instances ==
+#set ($serverList = $serverList.get('servers'))
 ## TABLE HEADER
 #set ($headerNames = ['Server Name', 'Branches', 'IP', 'Started Time', 'Load test data', 'Status', 'Log', 'Action'])
 (% class="extradata-list server-list-row" %)
@@ -86,11 +109,7 @@ Please, select project and branches for the following GitHub repositories for te
   |=(% class="col-label" %)$headerName##
 #end
 
-##=========================================
-## Get list of running OpenStack VM servers
-##=========================================
 ## TABLE BODY
-#set ($serverList = $serverList.get('servers'))
 #set ($datasetList = $services.pcTestDeployment.listTestDatasets())
 #foreach ($obj in $serverList)
   #set($beginTime = $obj.get('created').replace('T',' ').replace('Z',''))
@@ -100,15 +119,15 @@ Please, select project and branches for the following GitHub repositories for te
   (% class="extradata-list server-list-row" %)##
   |(% class="server-name" %)$escapetool.xml($obj.get('name'))##
   |(% class="branches" %){{html clean="false"}}#if("${pn}" != "")PN: &lt;span class="code"&gt;$pn&lt;/span&gt;#end##
-                                               #if("${rm}" != ""), RM: &lt;span class="code"&gt;$rm&lt;/span&gt;#end##
-                                               #if("${pc}" != ""), PC: &lt;span class="code"&gt;$pc&lt;/span&gt;#end{{/html}}##
+                                           #if("${rm}" != ""), RM: &lt;span class="code"&gt;$rm&lt;/span&gt;#end##
+                                           #if("${pc}" != ""), PC: &lt;span class="code"&gt;$pc&lt;/span&gt;#end{{/html}}##
   |(% class="ip" %){{html clean="false"}}&lt;a href="http://$escapetool.xml($obj.get('ip')):8080" target="_blank"&gt;$escapetool.xml($obj.get('ip'))&lt;/a&gt;{{/html}}##
   |(% class="begin-time" %)$!{beginTime}##
   |(% class="load-test-data" %)#if($obj.get('status') == "active"){{html clean="false"}}##
-&lt;select class="test-dataset-select"&gt;##
-#foreach ($obj in $datasetList)&lt;option value="$obj"&gt;$obj&lt;/option&gt;#end##
-&lt;/select&gt;##
-&lt;span class="buttonwrapper"&gt;&lt;a class="button load-data" href="$obj.get('ip')"&gt;&lt;span class="fa fa-cloud-upload"&gt; &lt;/span&gt;&lt;span&gt;Load&lt;/span&gt;&lt;/a&gt;&lt;/span&gt;{{/html}}#end##
+  &lt;select class="test-dataset-select"&gt;##
+    #foreach ($obj in $datasetList)&lt;option value="$obj"&gt;$obj&lt;/option&gt;#end##
+  &lt;/select&gt;##
+  &lt;span class="buttonwrapper"&gt;&lt;a class="button load-data" href="$obj.get('ip')"&gt;&lt;span class="fa fa-cloud-upload"&gt; &lt;/span&gt;&lt;span&gt;Load&lt;/span&gt;&lt;/a&gt;&lt;/span&gt;{{/html}}#end##
   |(% class="run-status $completedCSS" %)$obj.get('status')##
   |(% class="logs" %)#if($obj.get('status') == "active"){{html clean="false"}}&lt;a href="http://$escapetool.xml($obj.get('ip')):8080/resources/serverlog.txt" target="_blank">logs&lt;/a&gt;{{/html}}#end##
   |(% class="action-delete" %){{html clean="false"}}&lt;span class="buttonwrapper"&gt;&lt;a class="button delete-server" href="$obj.get('name')"&gt;&lt;span class="fa fa-trash"&gt; &lt;/span&gt;&lt;span&gt;Delete&lt;/span&gt;&lt;/a&gt;&lt;/span&gt;{{/html}}
@@ -198,7 +217,8 @@ Frontend (this) server {{html clean="false"}}&lt;a target="_blank" href="../reso
       <cache>long</cache>
     </property>
     <property>
-      <code>var container = $('deploy-content');
+      <code>var container = $('deploy-content') || '';
+
 var BASE_API_URL = 'https://api.github.com/repos/phenotips/';
 var BASE_GITREPO_URL = 'https://github.com/phenotips/';
 var SERVICE_URL = new XWiki.Document('PCTestDeploymentService', 'PhenomeCentral').getURL('get');
@@ -209,6 +229,8 @@ var repos = [
             'remote-matching',
             'phenomecentral.org'
             ];
+
+var usage = JSON.parse($('usage').value);
 
 var selects = {};
 
@@ -292,7 +314,8 @@ var attachServerDeleteListeners = function () {
                   },
                   onSuccess: function(response) {
                       console.log('Success');
-                      item.up('tr').hide();
+                      //item.up('tr').hide();
+                      location.reload();
                   },
                   onComplete : function() {
                       console.log('Complete');
@@ -347,17 +370,15 @@ var attachLoadDataListeners = function () {
 
 
 var selectProject = function(name) {
-    if (name == "PhenoTips") {
-        $('repo-select-phenotips').up().show();
-        $('repo-select-patient-network').up().hide();
-        $('repo-select-remote-matching').up().hide();
-        $('repo-select-phenomecentral.org').up().hide();
-    } else {
-        $('repo-select-phenotips').up().hide();
-        $('repo-select-patient-network').up().show();
-        $('repo-select-remote-matching').up().show();
-        $('repo-select-phenomecentral.org').up().show();
-    }
+    var isPT = (name == "PhenoTips");
+    $('repo-select-phenotips').disabled = !isPT;
+    $('repo-select-phenotips').up().style.opacity = isPT ? 1 : 0.3;
+    $('repo-select-patient-network').disabled = isPT;
+    $('repo-select-patient-network').up().style.opacity = isPT ? 0.3 : 1;
+    $('repo-select-remote-matching').disabled = isPT;
+    $('repo-select-remote-matching').up().style.opacity = isPT ? 0.3 : 1;
+    $('repo-select-phenomecentral.org').disabled = isPT;
+    $('repo-select-phenomecentral.org').up().style.opacity = isPT ? 0.3 : 1;
 }
 
 var attachProjectSelectionListeners = function () {
@@ -459,15 +480,12 @@ var drawPiCharts = function () {
     var stats = {'cpu'  : [cpuMax - cpuUsed, cpuUsed],
                  'ram'  : [ramMax - ramUsed, ramUsed],
                  'inst' : [instMax - instUsed, instUsed]};
-    var color = {'cpu'  : ["#ddd", "#FF8C00"],
-                 'ram'  : ["#ddd", "#428bca"],
-                 'inst' : ["#ddd", "#f0ad4e"]};
-    var totals = {'cpu'  : cpuMax, 'ram'  : ramMax, 'inst' : instMax};
+    var colors = ["#ddd", "#8aaece"];
+    var totals = {'cpu'  : cpuMax, 'ram' : ramMax, 'inst' : instMax};
 
     $$('canvas').each( function(canvas) {
         var ctx = canvas.getContext("2d");
         var data = stats[canvas.id];
-        var colors = color[canvas.id];
         var center = [canvas.width / 2, canvas.height / 2];
         var radius = Math.min(canvas.width, canvas.height) / 2;
         var lastPosition = 60, total = totals[canvas.id];
@@ -476,7 +494,7 @@ var drawPiCharts = function () {
             ctx.fillStyle = colors[i];
             ctx.beginPath();
             ctx.moveTo(center[0],center[1]);
-            ctx.arc(center[0],center[1],radius,lastPosition,lastPosition+(Math.PI*2*(data[i]/total)),false);
+            ctx.arc(center[0],center[1],radius,lastPosition,lastPosition + (Math.PI*2*(data[i]/total)),false);
             ctx.lineTo(center[0],center[1]);
             ctx.fill();
             lastPosition += Math.PI*2*(data[i]/total);
@@ -485,6 +503,9 @@ var drawPiCharts = function () {
 }
 
 document.observe('xwiki:dom:loaded', function() {
+    if (container == '') {
+        return;
+    }
     requestReposInfo();
     attachButtonHandlers();
     drawPiCharts();
@@ -644,7 +665,12 @@ document.observe('xwiki:dom:loaded', function() {
 .projects {
   font-weight: 700;
   margin: 1em 11em;
-  font-weight: 700;
+}
+.projects label {
+  margin-right: 0.5em;
+}
+.projects label:nth-child(2) a:link {
+  color: #428bca;
 }
 .disabled-button {
   background-color: #999 !important;
@@ -658,6 +684,22 @@ document.observe('xwiki:dom:loaded', function() {
   text-align: center;
   margin: 1em;
   font-size: 12px;
+}
+#stats-content {
+  display: inline-block;
+  margin-left: 9em;
+  top: 5.2em;
+  position: absolute;
+  text-align: center;
+  border: 1px dotted #D7DEE3;
+  border-radius: 4px;
+  padding: 5px 10px;
+}
+#deploy-content {
+  display: inline-block;
+}
+#limit-message {
+  color: red;
 }</code>
     </property>
     <property>

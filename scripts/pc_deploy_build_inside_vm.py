@@ -178,6 +178,10 @@ def start_instance(settings):
     command = ['curl', TRIGGER_INITIALIZATION_UTL]
     retcode = subprocess.call(command)
 
+    # wait for the server to finish
+    logging.info('All done, waiting for instance to shutdown...')
+    p.wait()
+
 
 def read_vm_metadata():
     # Fetch server metadata (to be used as default values for script parameters)

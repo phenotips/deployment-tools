@@ -27,29 +27,37 @@ RM_REPOSITORY_NAME = 'remote-matching'
 PC_REPOSITORY_NAME = 'phenomecentral.org'
 PT_REPOSITORY_NAME = 'phenotips'
 
-BUILD_ORDER = [PN_REPOSITORY_NAME, RM_REPOSITORY_NAME, PC_REPOSITORY_NAME]
+PROJECTS = { "PhenomeCentral": { "build_order": [PN_REPOSITORY_NAME, RM_REPOSITORY_NAME, PC_REPOSITORY_NAME],
+                                 "distrib_dir": os.path.join('phenomecentral.org', 'standalone', 'target'),
+                                 "distrib_file": 'phenomecentral-standalone*.zip'
+                               },
+             "PhenoTips":      { "build_order": [PT_REPOSITORY_NAME],
+                                 "distrib_dir": os.path.join('phenotips', 'distribution', 'standalone', 'target'),
+                                 "distrib_file": 'phenotips-standalone*.zip'
+                               }
+           }
+
+REPO_SHORTCUTS = { PN_REPOSITORY_NAME : "pn",
+                   RM_REPOSITORY_NAME : "rm",
+                   PC_REPOSITORY_NAME : "pc",
+                   PT_REPOSITORY_NAME : "pt" }
 
 DEFAULT_BRANCH_NAME = 'master'
 DEFAULT_BUILD_NAME = DEFAULT_BRANCH_NAME
-DEFAULT_PROJECT = 'PhenomeCentral'
 
 PARENT_PHENOTIPS_GIT_URL = 'https://github.com/phenotips/'
 TRIGGER_INITIALIZATION_UTL = 'http://localhost:8080'
 
+DEPLOYMENT_TOOLS_REPOSITORY_NAME = 'deployment-tools'
+DEPLOYMENT_BRANCH_NAME = 'master'
+DEPLOYMENT_REST_SUBDIR = 'pc-test-deploy-rest'
+DEPLOYMENT_REST_JAR_FILES = os.path.join(DEPLOYMENT_REST_SUBDIR, 'target', 'pc-test-deploy*.jar')
+REST_TARGET_LOCATION = os.path.join("webapps", "phenotips", "WEB-INF", "lib")
+
+WEB_ACCESSIBLE_LOG_FILE = os.path.join("webapps", "phenotips", "resources", "serverlog.txt")
+
 
 def setup_folders(settings):
-    # define custom build name
-    if settings.build_name == DEFAULT_BRANCH_NAME and (settings.pn_branch_name != DEFAULT_BRANCH_NAME or settings.rm_branch_name != DEFAULT_BRANCH_NAME or settings.pc_branch_name != DEFAULT_BRANCH_NAME):
-        settings.build_name = settings.pn_branch_name + '_' + settings.rm_branch_name + '_' + settings.pc_branch_name
-
-    if settings.project == DEFAULT_PROJECT:
-        settings.pc_distrib_dir = os.path.join(settings.git_dir, 'phenomecentral.org', 'standalone', 'target')
-    else:
-        settings.pc_distrib_dir = os.path.join(settings.git_dir, 'phenotips', 'distribution', 'standalone', 'target')
-
-    settings.this_build_deploy_dir = os.path.join(settings.deploy_dir, settings.build_name)
-    logging.info('{0} deployment directory: {1}'.format(settings.project, settings.this_build_deploy_dir))
-
     # Wipe GitHub directory for a fresh checkout
     if os.path.isdir(settings.git_dir):
         logging.info('Removing existig github repos in {0}'.format(settings.git_dir))
@@ -66,44 +74,78 @@ def setup_folders(settings):
     os.mkdir(settings.this_build_deploy_dir)
 
 
-def build_pc(settings):
+def build_project(settings):
     # Checkout and build all repositories
-    for repo_name in BUILD_ORDER:
-        if repo_name not in settings.repositories:
+    for repo_name in PROJECTS[settings.project]["build_order"]:
+        if repo_name not in settings.use_branch:
             logging.error('Error: branch for repo {0} is not specified'.format(repo_name))
-            sys.exit(-1)
+            exit_on_fail(settings)
         os.chdir(settings.git_dir)
-        build_repo(repo_name, settings.repositories[repo_name])
+        build_repo(repo_name, settings.use_branch[repo_name], settings)
 
-def build_pt(settings):
+def build_reindex_rest(settings):
     os.chdir(settings.git_dir)
-    build_repo(PT_REPOSITORY_NAME, settings.repositories[PT_REPOSITORY_NAME])
+    # thi sis not an essential component, so set `continue_on_fail = True`
+    build_repo(DEPLOYMENT_TOOLS_REPOSITORY_NAME, DEPLOYMENT_BRANCH_NAME, settings, sub_dir = DEPLOYMENT_REST_SUBDIR, continue_on_fail = True)
 
-def build_repo(repo_name, repo_branch):
+def build_repo(repo_name, repo_branch, settings, sub_dir = None, continue_on_fail = False):
     logging.info('Started building repo {0} ...'.format(repo_name))
     os.mkdir(repo_name)
     os.chdir(repo_name)
 
-    Repo.clone_from(PARENT_PHENOTIPS_GIT_URL + repo_name + '.git', '.', branch=repo_branch)
+    try:
+        Repo.clone_from(PARENT_PHENOTIPS_GIT_URL + repo_name + '.git', '.', branch=repo_branch)
+    except:
+        logging.error('Error: failed to check out branch {0} for repo {1}'.format(repo_branch, repo_name))
+        if continue_on_fail:
+            return
+        else:
+            exit_on_fail(settings)
+
+    logging.info('Successfully cloned and checked out branch {0} for repo {1}'.format(repo_branch, repo_name))
+
+    if sub_dir is not None:
+        os.chdir(sub_dir)
+
     # make python wait for os.system build process to finish before building next repo
     retcode = subprocess.call(['mvn', 'clean', 'install', '-Pquick'], shell=True)
     if retcode != 0:
         logging.error('Error: building repo {0} failed'.format(repo_name))
-        sys.exit(-2)
+        if continue_on_fail:
+            return
+        else:
+            exit_on_fail(settings)
     logging.info('->Finished building repo {0}.'.format(repo_name))
 
 
 def deploy(settings):
     # extract distribution files to the target installation directory
     logging.info('Started extracting {0} distribution files to the target installation directory {1} ...'.format(settings.project, settings.this_build_deploy_dir))
-    assert os.path.isdir(settings.pc_distrib_dir)
-    os.chdir(settings.pc_distrib_dir)
-    dist_filename = settings.project.lower() + '-standalone*.zip'
+    assert os.path.isdir(settings.distrib_dir)
+    os.chdir(settings.distrib_dir)
+    dist_filename = PROJECTS[settings.project]['distrib_file']
+    logging.info('->Trying to install from {0}...'.format(dist_filename))
     retcode = subprocess.call(['unzip', dist_filename, '-d', settings.this_build_deploy_dir])
     if retcode != 0:
         logging.error('Error: extracting {0} distribution files to the target installation directory {1} failed'.format(settings.project, settings.this_build_deploy_dir))
-        sys.exit(-3)
+        exit_on_fail(settings)
     logging.info('->Finished extracting {0} distribution files.'.format(settings.project))
+
+def deploy_rest(settings):
+    # we don't know what was insode the installation .zip file that was extracted in deploy() above
+    # - but we can assume ther eis only one installation there, as each branch has its own deploy dir
+    deploy_dir_list = os.listdir(settings.this_build_deploy_dir)
+    logging.info("Assuming project instalation directgory to be {0}".format(deploy_dir_list[0]))
+    jar_file_target_dir = os.path.join(settings.this_build_deploy_dir, deploy_dir_list[0], REST_TARGET_LOCATION)
+    jar_file_source = os.path.join(settings.git_dir, DEPLOYMENT_TOOLS_REPOSITORY_NAME, DEPLOYMENT_REST_JAR_FILES)
+    logging.info('Copying REST jars {0} to {1} ...'.format(jar_file_source, jar_file_target_dir))
+    retcode = subprocess.call('cp -t ' + jar_file_target_dir + ' ' + jar_file_source, shell=True)
+    if retcode != 0:
+        logging.error('Failed to copy {0} to {1}'.format(jar_file_source, jar_file_target_dir))
+        #exit_on_fail(settings)
+        # not critical, so no exit
+        return
+    logging.info('->Finished copying the RESt JAR file.')
 
 def start_instance(settings):
     # Run instance
@@ -122,7 +164,7 @@ def start_instance(settings):
         # os.system("sed -i 's/PAUSE//' start.bat")
         p = subprocess.Popen([start_filename], shell=True)
     else:
-        log_file = open("webapps/phenotips/resources/serverlog.txt", "wb")
+        log_file = open(WEB_ACCESSIBLE_LOG_FILE, "wb")
         p = subprocess.Popen([start_filename], stdout=log_file, stderr=log_file)
 
     logging.info('<------{0} STARTED------>'.format(settings.project))
@@ -153,13 +195,30 @@ def read_vm_metadata():
             pass
     return vm_metadata
 
+def exit_on_fail(settings):
+    mark_progress("failed", settings)
+    sys.exit(-1)
+
+def mark_progress(stage_name, settings = None):
+    if not settings.inside_vm:
+        return
+
+    if settings is not None:
+        os.chdir(settings.start_directory)
+    open('__' + stage_name + '.indicator', 'w').close()
 
 def setup_logfile(settings):
-    # Wipe out previous log file with the same deployment name if exists
-    open('pc_deploy_{0}.log'.format(settings.build_name), 'w').close()
+    if not settings.inside_vm:
+        log_file = 'deploy_{0}.log'.format(settings.build_name)
+    else:
+        log_file = 'deploy.log'
+
+    if os.path.isfile(log_file):
+        # wipe out previous log file with the same deployment name if exists
+        open(log_file, 'w').close()
 
     format_string = '%(levelname)s: %(asctime)s: %(message)s'
-    logging.basicConfig(filename='pc_deploy_{0}.log'.format(settings.build_name), level=logging.INFO, format=format_string)
+    logging.basicConfig(filename=log_file, level=logging.INFO, format=format_string)
 
     # clone output to console
     console = logging.StreamHandler()
@@ -168,65 +227,96 @@ def setup_logfile(settings):
     logging.getLogger('').addHandler(console)
 
 
-def parse_args(args, vm_metadata):
-    default_parameter_values = {'pn' : DEFAULT_BRANCH_NAME, 'rm' : DEFAULT_BRANCH_NAME, 'pc' : DEFAULT_BRANCH_NAME, 'pt' : DEFAULT_BRANCH_NAME, 'bn' : DEFAULT_BUILD_NAME, 'pr' : DEFAULT_PROJECT}
+def parse_args(vm_metadata):
+    default_parameter_values = {'pn' : DEFAULT_BRANCH_NAME, 'rm' : DEFAULT_BRANCH_NAME, 'pc' : DEFAULT_BRANCH_NAME, 'pt' : DEFAULT_BRANCH_NAME, 'bn' : DEFAULT_BUILD_NAME}
 
     for param_name in default_parameter_values:
         if param_name in vm_metadata:
             default_parameter_values[param_name] = vm_metadata[param_name]
 
-    read_from_vm_meta_str = ", as specified in VM metadata";
-    pn_read_from_vm = read_from_vm_meta_str if 'pn' in vm_metadata else ""
-    rm_read_from_vm = read_from_vm_meta_str if 'rm' in vm_metadata else ""
-    pc_read_from_vm = read_from_vm_meta_str if 'pc' in vm_metadata else ""
-    pt_read_from_vm = read_from_vm_meta_str if 'pt' in vm_metadata else ""
-
-    parser = ArgumentParser(description='Checks out all the code required to build a fresh PC instance, and then builds and deploys a PC instance.\n\n' +
+    parser = ArgumentParser(description='Checks out all the code required to build a fresh PC or PT instance, and then builds and deploys the instance.\n\n' +
                                         'Sample usage to build, install and run a pull request form the PN-123 branch: "' +
-                                        os.path.basename(__file__) + ' -pn PN-123 --start"', formatter_class=RawTextHelpFormatter)
+                                        os.path.basename(__file__) + ' --project PhenomeCentral --pn PN-123 --start"', formatter_class=RawTextHelpFormatter)
+
+    if 'pr' in vm_metadata and (vm_metadata['pr'] in PROJECTS.keys()):
+        # default project to the value specified in VM metadata (if it is a supported project)
+        parser.add_argument("--project", dest='project',
+                      default=vm_metadata['pr'], choices=PROJECTS.keys(),
+                      help="project name (by default '{0}' as specified in VM metadata)".format(vm_metadata['pr']))
+    else:
+        # make project a required parameter, if no valid project is specified in Vm metadata
+        parser.add_argument("--project", dest='project', choices=PROJECTS.keys(), help="project name (required)", required=True)
+
     parser.add_argument("--start", dest='start_after_deploy',
                       action="store_true",
                       help="unzip and start PhenomeCentral instance after build")
-    parser.add_argument("--pn", dest='pn_branch_name',
-                      default=default_parameter_values['pn'],
-                      help="branch name for Patient Network repo ('{0}' by default".format(default_parameter_values['pn']) + pn_read_from_vm + ")")
-    parser.add_argument("--rm", dest='rm_branch_name',
-                      default=default_parameter_values['rm'],
-                      help="branch name for Remote Matching repo ('{0}' by default".format(default_parameter_values['rm']) + rm_read_from_vm + ")")
-    parser.add_argument("--pc", dest='pc_branch_name',
-                      default=default_parameter_values['pc'],
-                      help="branch name for PhenomeCentral repo ('{0}' by default".format(default_parameter_values['pc']) + pc_read_from_vm + ")")
-    parser.add_argument("--pt", dest='pt_branch_name',
-                      default=DEFAULT_BRANCH_NAME,
-                      help="branch name for PhenoTips repo ('{0}' by default)".format(default_parameter_values['pt']) + pt_read_from_vm + ")")
+
+    # options for all the repository branches that may be used
+    read_from_vm_meta_str = ", as specified in VM metadata";
+    for repo, repo_shortcut in REPO_SHORTCUTS.items():
+        parser.add_argument("--" + repo_shortcut, dest=repo_shortcut + '_branch_name',
+                      default=default_parameter_values[repo_shortcut],
+                      help="branch name for [{0}] repo ('{1}' by default".format(repo, default_parameter_values[repo_shortcut]) + (read_from_vm_meta_str if repo_shortcut in vm_metadata else "") + ")")
+
     parser.add_argument("--build-name", dest='build_name',
                       default=default_parameter_values['bn'],
                       help="custom build name (by default '{0}' or '[pn_branch_name]_[rm_branch_name]_[pc_branch_name]')".format(default_parameter_values['bn']))
-    parser.add_argument("--project", dest='project',
-                      default=DEFAULT_PROJECT, choices=['PhenoTips', 'PhenomeCentral'],
-                      help="project name, either 'PhenoTips' or 'PhenomeCentral' (by default '{0}')".format(DEFAULT_PROJECT))
+    parser.add_argument("--install-reindex-rest", dest='reindex_rest',
+                      action="store_true",
+                      help="install a REST endpoint to reindex data (needed for automatic uploading of XAR files)")
+    parser.add_argument("--inside-vm", dest='inside_vm',
+                      action="store_true",
+                      help="trigers generation of extra files and extra logs used by automatic deployment framework")
+
+    start_dir = os.path.dirname(os.path.abspath(__file__))
     parser.add_argument("--git-dir", dest='git_dir',
-                      default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'github'),
+                      default=os.path.join(start_dir, 'github'),
                       help="path to the GitHub directory to clone repositories (by default the 'github' folder in the directory from where the script runs)")
     parser.add_argument("--deployment-dir", dest='deploy_dir',
-                      default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'deploy'),
+                      default=os.path.join(start_dir, 'deploy'),
                       help="path to the deployment folder that will contain folder for current installation (by default the 'deploy/[build_name]' folder in the directory from where the script runs)")
     args = parser.parse_args()
-
-    # Fill map between repos and their baranch names to build
-    args.repositories = {}
-    args.repositories[PN_REPOSITORY_NAME] = args.pn_branch_name
-    args.repositories[RM_REPOSITORY_NAME] = args.rm_branch_name
-    args.repositories[PC_REPOSITORY_NAME] = args.pc_branch_name
-    args.repositories[PT_REPOSITORY_NAME] = args.pt_branch_name
-
     return args
 
 
-def main(args=sys.argv[1:]):
-    vm_metadata = read_vm_metadata()
-    settings = parse_args(args, vm_metadata)
+def get_settings(args):
+    settings = args
 
+    # Fill map between repos and their branch names to build (for selected project)
+    all_default_branches = True
+    settings.use_branch = {}
+    for repo_name in PROJECTS[settings.project]["build_order"]:
+        settings.use_branch[repo_name] = getattr(args, REPO_SHORTCUTS[repo_name] + "_branch_name");
+        if settings.use_branch[repo_name] != DEFAULT_BRANCH_NAME:
+            all_default_branches = False
+
+    settings.start_directory = os.path.dirname(os.path.abspath(__file__))
+    if not os.path.isabs(settings.git_dir):
+        settings.git_dir = os.path.join(settings.start_directory, args.git_dir)
+    if not os.path.isabs(settings.deploy_dir):
+        settings.deploy_dir = os.path.join(settings.start_directory, args.deploy_dir)
+
+    # define custom build name if any of the branches use differ from the default
+    if settings.build_name == DEFAULT_BUILD_NAME and not all_default_branches:
+        settings.build_name = "_".join(settings.use_branch.values())
+
+    settings.distrib_dir = os.path.join(settings.git_dir, PROJECTS[settings.project]["distrib_dir"])
+
+    settings.this_build_deploy_dir = os.path.join(settings.deploy_dir, settings.build_name)
+
+    return settings
+
+
+def main():
+    vm_metadata = read_vm_metadata()
+
+    args = parse_args(vm_metadata)
+
+    settings = get_settings(args)
+
+    mark_progress("started", settings)
+
+    #print("Settings: ", str(settings))
     setup_logfile(settings)
 
     logging.info('Started deployment with arguments: [' + ' '.join(sys.argv[1:]) + ']')
@@ -235,18 +325,27 @@ def main(args=sys.argv[1:]):
     else:
         logging.info('No VM metadata available')
 
+    logging.info('Build name: {0}'.format(settings.build_name))
+    logging.info('Expected {0} jar file location: {1}'.format(settings.project, settings.distrib_dir))
+    logging.info('Deployment directory for {0}: {1}'.format(settings.project, settings.this_build_deploy_dir))
+
     setup_folders(settings)
 
-    if settings.project == DEFAULT_PROJECT:
-        build_pc(settings)
-    else:
-        build_pt(settings)
+    mark_progress("building", settings)
+
+    build_project(settings)
 
     deploy(settings)
 
+    if settings.reindex_rest:
+        build_reindex_rest(settings)
+        deploy_rest(settings)
+
     if settings.start_after_deploy:
+        mark_progress("starting_instance", settings)
         start_instance(settings)
 
+    mark_progress("finished", settings)
     logging.info('DONE')
 
 if __name__ == '__main__':
@@ -254,5 +353,6 @@ if __name__ == '__main__':
         sys.exit(main())
     except Exception:
       logging.error('Exception: [{0}]'.format(traceback.format_exc()))
+
 
 

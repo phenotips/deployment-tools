@@ -263,11 +263,21 @@ def import_xar_files(settings, session, full_file_name, xar_file_name):
     zip=zipfile.ZipFile(full_file_name)
     filename_list = zip.namelist()
     for file in filename_list:
-        name = file  + ':'
+        filename = os.path.splitext(os.path.basename(file))[0]
+        file_space = os.path.dirname(file)
+        if filename in ['package','']:
+            continue
+        upload_file_name = file_space + "." + filename
+        logging.info('- adding file {0} as {1} to the list of imported files'.format(file, upload_file_name))
+        name = upload_file_name  + ':'
         payload = payload + '&language_' + name + '=&pages=' + name
 
     headers = {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'}
     xar_import_url = compose_url(settings, XAR_IMPORT_URL)
+
+    #print("Payload: " + str(payload))
+    #print("Headers: " + str(headers))
+
     req = session.post(xar_import_url + payload, headers=headers)
     if req.status_code in [200, 201]:
         logging.info('Imported XWiki documents from XAR file')

@@ -1,0 +1,12 @@
+[Unit]
+Description=Log server
+After=network.target
+
+[Service]
+User=centos
+Type=simple
+ExecStart=/home/pcinstall/pc_deploy_logserver.sh
+TimeoutStartSec=0
+
+[Install]
+WantedBy=default.target

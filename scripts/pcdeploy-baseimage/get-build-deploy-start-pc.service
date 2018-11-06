@@ -1,0 +1,12 @@
+[Unit]
+Description=PC build deploy backend
+After=network.target
+
+[Service]
+User=centos
+Type=simple
+ExecStart=/home/pcinstall/pc_deploy_build_inside_vm.sh
+TimeoutStartSec=0
+
+[Install]
+WantedBy=default.target

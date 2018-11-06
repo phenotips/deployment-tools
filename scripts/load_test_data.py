@@ -46,6 +46,7 @@ DATASETS_LIST_FILENAME = 'datasets_list.txt'
 #######################################################
 # PC settings
 #######################################################
+DEFAULT_SERVER_PORT = "8080"
 CREDENTIALS = 'Admin:admin'
 CONSENT_URL = '/rest/patients/{0}/consents/assign'
 GRANT_CONSENT_NAMES = ["real", "genetic", "share_history", "share_images", "matching"]
@@ -319,6 +320,9 @@ def parse_args(args):
 
     if args.action == 'upload-dataset' and (args.server_ip is None or args.dataset_name is None):
         parser.error("Action 'upload-dataset' requires --ip and --dataset-name")
+
+    if args.server_ip is not None and ":" not in args.server_ip:
+        args.server_ip += ":" + DEFAULT_SERVER_PORT
 
     return args
 

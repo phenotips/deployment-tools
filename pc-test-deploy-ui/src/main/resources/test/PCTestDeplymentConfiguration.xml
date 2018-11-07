@@ -116,11 +116,17 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
   #set($pn = $obj.get('metadata').optString('pn'))
   #set($rm = $obj.get('metadata').optString('rm'))
   #set($pc = $obj.get('metadata').optString('pc'))
+  #set($pt = $obj.get('metadata').optString('pt'))
+  #set($pr = $obj.get('metadata').optString('pr'))
   (% class="extradata-list server-list-row" %)##
   |(% class="server-name" %)$escapetool.xml($obj.get('name'))##
-  |(% class="branches" %){{html clean="false"}}#if("${pn}" != "")PN: &lt;span class="code"&gt;$pn&lt;/span&gt;#end##
+  |(% class="branches" %){{html clean="false"}}#if("${pr}" == "PhenomeCentral")##
+                                           #if("${pn}" != "")PN: &lt;span class="code"&gt;$pn&lt;/span&gt;#end##
                                            #if("${rm}" != ""), RM: &lt;span class="code"&gt;$rm&lt;/span&gt;#end##
-                                           #if("${pc}" != ""), PC: &lt;span class="code"&gt;$pc&lt;/span&gt;#end{{/html}}##
+                                           #if("${pc}" != ""), PC: &lt;span class="code"&gt;$pc&lt;/span&gt;#end##
+                                           #else##
+                                             #if("${pt}" != "")PT: &lt;span class="code"&gt;$pt&lt;/span&gt;#end##
+                                           #end{{/html}}##
   |(% class="ip" %){{html clean="false"}}&lt;a href="http://$escapetool.xml($obj.get('ip')):8080" target="_blank"&gt;$escapetool.xml($obj.get('ip'))&lt;/a&gt;{{/html}}##
   |(% class="begin-time" %)$!{beginTime}##
   |(% class="load-test-data" %)#if($obj.get('status') == "active"){{html clean="false"}}##

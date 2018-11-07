@@ -129,16 +129,20 @@ def list_servers(conn):
     for server in servers_list:
         #logging.info(server.to_dict())
         ipf = ''
-        if NETWORK_NAME not in server.addresses.keys():
-            # exclude servers not inthe PC deployment network
+        if server.status != 'BUILD' and NETWORK_NAME not in server.addresses.keys():
+            # exclude servers not in the PC deployment network
             continue
         if server.name.startswith(EXCLUDE_SERVER_PREFIX):
             # exclude the frontend itself, and any other development servers
             continue
         logging.info("Listing server : {0}".format(server.name))
-        for address in server.addresses[NETWORK_NAME]:
-            if address['OS-EXT-IPS:type'] == 'floating':
-                ipf = address['addr']
+
+        if NETWORK_NAME in server.addresses.keys():
+            for address in server.addresses[NETWORK_NAME]:
+                if address['OS-EXT-IPS:type'] == 'floating':
+                    ipf = address['addr']
+        else:
+            ipf = "not assigned"
         data['servers'].append({'id' : server.id, 'name' : server.name, 'ip' : ipf, 'created' : server.created_at, 'status' : server.vm_state, 'metadata' : server.metadata})
 
     # Get CPU and memory usage stats via nova

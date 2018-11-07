@@ -8,9 +8,10 @@ from __future__ import with_statement
 import sys
 import os
 import logging
-import openstack
 import subprocess
 import traceback
+# openstack source: https://github.com/openstack/openstacksdk/tree/master/openstack/network/v2
+import openstack
 from novaclient import client
 
 #####################################################
@@ -28,10 +29,16 @@ OS_TENANT_NAME="HSC_CCM_PhenoTips"
 
 # script parameters
 SERVER_LIST_FILE_NAME = "server_list.txt"
-DEFAULT_ACTION = 'deploy'
 DEFAULT_BRANCH_NAME = 'master'
-DEFAULT_PROJECT = 'PhenomeCentral'
 
+# list of supported projects, and repositories needed to build each project
+PROJECTS = { "PhenomeCentral": { "pn": "Patient Network",
+                                 "rm": "Remote Matching",
+                                 "pc": "PhenomeCentral",
+                               },
+             "PhenoTips":      { "pt": "PhenoTips"
+                               }
+           }
 
 def script(settings):
     # Initialize and turn on debug openstack logging
@@ -40,7 +47,7 @@ def script(settings):
 
     # Connection
     credentials = get_credentials()
-    logging.info("Got credentials {0}".format(credentials))
+    logging.info("Got OpenStack credentials {0}".format(credentials))
     conn = openstack.connect(**credentials)
     logging.info("Connected to OpenStack")
 
@@ -48,9 +55,19 @@ def script(settings):
         list_servers(conn)
         sys.exit(0)
 
-    # define custom build name
-    if settings.build_name == DEFAULT_BRANCH_NAME and (settings.pn_branch_name != DEFAULT_BRANCH_NAME or settings.rm_branch_name != DEFAULT_BRANCH_NAME or settings.pc_branch_name != DEFAULT_BRANCH_NAME):
-        settings.build_name = settings.pn_branch_name + '_' + settings.rm_branch_name + '_' + settings.pc_branch_name
+    if settings.action == 'deploy':
+        # check if a custom build name should be set (only when deploying)
+        all_default_branches = True
+        settings.branch_names = {}
+        for repo in PROJECTS[settings.project].keys():
+            settings.branch_names[repo] = getattr(settings, repo + "_branch_name");
+            if settings.branch_names[repo] != DEFAULT_BRANCH_NAME:
+                all_default_branches = False
+
+        if settings.build_name == DEFAULT_BRANCH_NAME and not all_default_branches:
+            settings.build_name = "_".join(settings.branch_names.values())
+            logging.info("Setting build name to {0}".format(settings.build_name))
+
     # find if there already exists a VM with the build name
     server = conn.compute.find_server(settings.build_name)
 
@@ -92,13 +109,12 @@ def create_server(conn, settings):
             # keep going, this is a minor error
 
     metadatau = {}
-    metadatau['pn'] = settings.pn_branch_name
-    metadatau['rm'] = settings.rm_branch_name
-    metadatau['pc'] = settings.pc_branch_name
-    metadatau['pt'] = settings.pt_branch_name
     metadatau['pr'] = settings.project
     metadatau['bn'] = settings.build_name
+    for repo in PROJECTS[settings.project].keys():
+        metadatau[repo] = settings.branch_names[repo]
 
+    logging.info("Setting VM metadata to {0}".format(str(metadatau)))
     logging.info("Creating a new VM..........")
 
     try:
@@ -180,8 +196,8 @@ def get_floating_ip(conn):
 
 # get credentials from Environment Variables set by running HSC_CCM_PhenoTips-openrc.sh
 def get_credentials():
-    logging.info("Environment variables: username: [{0}]".format(os.environ['OS_USERNAME']))
-    logging.info("Environment variables: URL: [{0}]".format(os.environ['OS_AUTH_URL']))
+    logging.info("Environment variables: OpenStack username: [{0}]".format(os.environ['OS_USERNAME']))
+    logging.info("Environment variables: OpenStack URL: [{0}]".format(os.environ['OS_AUTH_URL']))
 
     d = {}
     d['version'] = os.environ['OS_IDENTITY_API_VERSION']
@@ -228,29 +244,26 @@ def setup_logfile(settings):
 def parse_args(args):
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument("--pn", dest='pn_branch_name',
+    parser.add_argument("--action", dest='action', required=True,
+                      help="action that user intented to do: kill a running VM ('delete'), get list of currently running VMs to the 'serever_list.txt' file ('list'), or spin a new one ('deploy')")
+
+    parser.add_argument("--project", dest='project',
+                      default=None,
+                      choices=PROJECTS.keys(), help="when deploying, the name of the project to be deployed into a VM (required)")
+    for project, branches in PROJECTS.items():
+        for repo, repo_name in branches.items():
+            parser.add_argument("--" + repo, dest=repo+'_branch_name',
                       default=DEFAULT_BRANCH_NAME,
-                      help="branch name for Patient Network repo ('{0}' by default)".format(DEFAULT_BRANCH_NAME))
-    parser.add_argument("--rm", dest='rm_branch_name',
-                      default=DEFAULT_BRANCH_NAME,
-                      help="branch name for Remote Matching repo ('{0}' by default)".format(DEFAULT_BRANCH_NAME))
-    parser.add_argument("--pc", dest='pc_branch_name',
-                      default=DEFAULT_BRANCH_NAME,
-                      help="branch name for PhenomeCentral repo ('{0}' by default)".format(DEFAULT_BRANCH_NAME))
-    parser.add_argument("--pt", dest='pt_branch_name',
-                      default=DEFAULT_BRANCH_NAME,
-                      help="branch name for PhenoTips repo ('{0}' by default)".format(DEFAULT_BRANCH_NAME))
+                      help="branch name for " + repo_name + " repo ('{0}' by default)".format(DEFAULT_BRANCH_NAME))
     parser.add_argument("--build-name", dest='build_name',
                       default=DEFAULT_BRANCH_NAME,
                       help="custom build name (by default '{0}' or '[pn_branch_name]_[rm_branch_name]_[pc_branch_name]') if any of branch names provided)".format(DEFAULT_BRANCH_NAME))
-    parser.add_argument("--project", dest='project',
-                      default=DEFAULT_PROJECT, choices=['PhenoTips', 'PhenomeCentral'],
-                      help="project name, either 'PhenoTips' or 'PhenomeCentral' (by default '{0}')".format(DEFAULT_PROJECT))
-    parser.add_argument("--action", dest='action',
-                      default=DEFAULT_ACTION,
-                      help="action that user intented to do, kill running VM server ('delete'), save list of currently running instances to the 'serever_list.txt' file ('list') in the directory where script is running, or spin a new one (by default '{0}')".format(DEFAULT_ACTION))
 
     args = parser.parse_args()
+
+    if args.action == "deploy" and args.project is None:
+        parser.error("Deploy actions requires a project to be selected")
+
     return args
 
 def main(args=sys.argv[1:]):

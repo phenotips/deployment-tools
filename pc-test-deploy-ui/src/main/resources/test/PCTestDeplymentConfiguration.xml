@@ -32,7 +32,7 @@
   <date>1539898821000</date>
   <contentUpdateDate>1539189773000</contentUpdateDate>
   <version>1.1</version>
-  <title>PhenomeCentral Test Deplyment Configuration</title>
+  <title>Test Deplyment Configuration</title>
   <comment/>
   <minorEdit>false</minorEdit>
   <syntaxId>xwiki/2.1</syntaxId>
@@ -75,10 +75,10 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
 ##
 &lt;div id="stats-content"&gt;
 #if ($message != '')
-  &lt;div class="box warningmessage"&gt;There is not enough OpenStack resources for starting a new instance. &lt;span id="limit-message"&gt;$message&lt;/span&gt; To alocate more space please, delete the unused running servers.&lt;/div&gt;
+  &lt;div class="box warningmessage"&gt;There is not enough &lt;a href="https://os.hpc4health.ca" target="_blank"&gt;OpenStack&lt;/a&gt; resources for starting a new instance. &lt;span id="limit-message"&gt;$message&lt;/span&gt; To alocate more space please, delete the unused running servers.&lt;/div&gt;
 #else
   #set ($inst = $mathtool.min($instLeft, $mathtool.idiv($ramLeft,8), $mathtool.idiv($cpuLeft,2)))
-  &lt;div class="box infomessage"&gt;There is enough space to run $inst more instances.&lt;/div&gt;
+  &lt;div class="box infomessage"&gt;&lt;a href="https://os.hpc4health.ca" target="_blank"&gt;OpenStack&lt;/a&gt; has resources for $inst more instances.&lt;/div&gt;
 #end
 &lt;input type='hidden' id='usage' value='$usage.toString()'/&gt;
 &lt;div class="chart"&gt;
@@ -100,7 +100,7 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
 {{/html}}
 ##
 ##
-== OpenStack PC running test instances ==
+== Running test servers ==
 #set ($serverList = $serverList.get('servers'))
 ## TABLE HEADER
 #set ($headerNames = ['Server Name', 'Branches', 'IP', 'Started Time', 'Load test data', 'Status', 'Logs', 'Action'])
@@ -676,8 +676,14 @@ document.observe('xwiki:dom:loaded', function() {
 .projects label {
   margin-right: 0.5em;
 }
-.projects label:nth-child(2) a:link {
+.projects label:nth-child(2) a:link, #deploy-content .repo-select:nth-child(1) a:link {
   color: #428bca;
+}
+.buttonwrapper a:link {
+  text-decoration: none;
+}
+.box.infomessage a:link, .box.infomessage a:visited {
+  color: #336699;
 }
 .disabled-button {
   background-color: #999 !important;

@@ -203,8 +203,9 @@ def grant_consents(settings, session, patient_id, consents):
     if req.status_code in [200,201]:
         logging.info('* granted consents {0}'.format(str(consents)))
     else:
-        logging.error('Error: Attempt to grant patient all consents failed with HTTP code {0}'.format(req.status_code))
-        sys.exit(-4)
+        logging.error('Error: Attempt to grant patient consents failed with HTTP code {0}'.format(req.status_code))
+        # this is ok, PT has no consents
+        # sys.exit(-4)
 
     logging.info('->Finished loading patients to PhenomeCentral instance.')
 

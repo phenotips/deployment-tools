@@ -71,6 +71,8 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
   &lt;/div&gt;
 ##
   &lt;div id="deploy-content"&gt;&lt;/div&gt;
+#else
+  &lt;div id="stats-container"&gt;&lt;/div&gt;
 #end
 ##
 &lt;div id="stats-content"&gt;
@@ -398,7 +400,9 @@ var attachProjectSelectionListeners = function () {
 var attachButtonHandlers  = function () {
     attachServerDeleteListeners();
     attachLoadDataListeners();
-    attachProjectSelectionListeners();
+    if (container != '') {
+      attachProjectSelectionListeners();
+    }
 }
 
 var updateUI = function () {
@@ -510,10 +514,9 @@ var drawPiCharts = function () {
 }
 
 document.observe('xwiki:dom:loaded', function() {
-    if (container == '') {
-        return;
+    if (container != '') {
+        requestReposInfo();
     }
-    requestReposInfo();
     attachButtonHandlers();
     drawPiCharts();
 });</code>
@@ -707,12 +710,16 @@ document.observe('xwiki:dom:loaded', function() {
   border: 1px dotted #D7DEE3;
   border-radius: 4px;
   padding: 5px 10px;
+  max-width : 35em;
 }
 #deploy-content {
   display: inline-block;
 }
 #limit-message {
   color: red;
+}
+#stats-container {
+  min-height: 15em;
 }</code>
     </property>
     <property>

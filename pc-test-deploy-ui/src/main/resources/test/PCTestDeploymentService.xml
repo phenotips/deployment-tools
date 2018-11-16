@@ -38,12 +38,17 @@
   <syntaxId>xwiki/2.1</syntaxId>
   <hidden>true</hidden>
   <content>{{velocity}}
-#if ("$!{request.action}" == "delete" &amp;&amp; "$!{request.buildName}" != "")
-  $services.pcTestDeployment.deleteServer("$!{request.buildName}")
-#elseif ("$!{request.action}" == "load-data" &amp;&amp; "$!{request.ip}" != "" &amp;&amp; "$!{request.dataName}" != "")
-  $services.pcTestDeployment.loadTestData("$!{request.ip}", "$!{request.dataName}"))
-#else
-  $services.pcTestDeployment.deploy("$!{request.pnBranchName}", "$!{request.rmBranchName}", "$!{request.pcBranchName}", "$!{request.ptBranchName}", "$!{request.buildName}", "$!{request.project}"))
-#end
+$response.setContentType('application/json')##
+{{html wiki="false" clean="false"}}
+#if ("$!{request.action}" == "delete")##
+#set($result = $services.pcTestDeployment.deleteServer("$!{request.buildName}"))##
+#elseif ("$!{request.action}" == "load-data")##
+#set($result = $services.pcTestDeployment.loadTestData("$!{request.ip}", "$!{request.dataName}"))##
+#elseif ("$!{request.action}" == "deploy")##
+#set($result = $services.pcTestDeployment.deploy("$!{request.pnBranchName}", "$!{request.rmBranchName}", "$!{request.pcBranchName}", "$!{request.ptBranchName}", "$!{request.buildName}", "$!{request.project}"))##
+#else##
+#set($result = false)##
+#end##
+{ "result": $result }
 {{/velocity}}</content>
 </xwikidoc>

@@ -46,20 +46,24 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
 #set ($usage = $serverList.get('usage'))
 #set ($cpuLeft = $usage.get('maxTotalCores') - $usage.get('totalCoresUsed'))
 #if ($cpuLeft &lt; $usage.get('requiredCores'))
-  #set ($message = "Less than $usage.get('requiredCores') virtual CPUs are free. ")
+  #set ($message = "less than $usage.get('requiredCores') virtual CPUs are free")
 #end
 #set ($ramLeft = $usage.get('maxTotalRAMSize') - $usage.get('totalRAMUsed'))
 #if ($ramLeft &lt; $usage.get('requiredRAM'))
-  #set ($message = $message + "Less than $usage.get('requiredRAM')GB of RAM are free. ")
+  #if ($message != '')#set ($message = $message + ", ")#end
+  #set ($message = $message + "less than $usage.get('requiredRAM')GB of free RAM")
 #end
 #set ($instLeft = $usage.get('maxTotalInstances') - $usage.get('totalInstancesUsed'))
 #if ($instLeft == 0)
-  #set ($message = $message + "OpenStack reached the maximum in number of running instances.")
+  #if ($message != '')#set ($message = $message + ", ")#end
+  #set ($message = $message + "reached the maximum allowed number of running instances")
 #end
+#set ($canRunInst = $mathtool.min($instLeft, $mathtool.idiv($ramLeft,8), $mathtool.idiv($cpuLeft,2)))
+#set ($discard = $usage.put("spaceForInst", $canRunInst))
 ##
 ##
 {{html}}
-#if ($message == '')
+&lt;div class="branch-select no-user-select #if ($message != '')disabled-branch-select#end"&gt;
   Please, select project and corresponding branches for test build deployment.
   &lt;div class="projects"&gt;
     &lt;label&gt;
@@ -69,35 +73,36 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
       &lt;input value="PhenoTips" name="project" type="radio"&gt;&lt;a href="http://phenotips.org" target="_blank"&gt;PhenoTips&lt;/a&gt;
     &lt;/label&gt;
   &lt;/div&gt;
-##
+  ##
   &lt;div id="deploy-content"&gt;&lt;/div&gt;
-#else
-  &lt;div id="stats-container"&gt;&lt;/div&gt;
-#end
+&lt;/div&gt;
 ##
 &lt;div id="stats-content"&gt;
 #if ($message != '')
-  &lt;div class="box warningmessage"&gt;There is not enough &lt;a href="https://os.hpc4health.ca" target="_blank"&gt;OpenStack&lt;/a&gt; resources for starting a new instance. &lt;span id="limit-message"&gt;$message&lt;/span&gt; To alocate more space please, delete the unused running servers.&lt;/div&gt;
+  &lt;div class="box warningmessage"&gt;There is not enough &lt;a href="https://os.hpc4health.ca" target="_blank"&gt;OpenStack&lt;/a&gt; resources for starting a new instance: &lt;span id="limit-message"&gt;$message&lt;/span&gt;.
+&lt;br&gt;&lt;br&gt;To alocate more space please delete some unused running servers.&lt;/div&gt;
 #else
-  #set ($inst = $mathtool.min($instLeft, $mathtool.idiv($ramLeft,8), $mathtool.idiv($cpuLeft,2)))
-  &lt;div class="box infomessage"&gt;&lt;a href="https://os.hpc4health.ca" target="_blank"&gt;OpenStack&lt;/a&gt; has resources for $inst more instances.&lt;/div&gt;
+
+  &lt;div class="box infomessage"&gt;&lt;a href="https://os.hpc4health.ca" target="_blank"&gt;OpenStack&lt;/a&gt; has resources for &lt;span id="inst-avail"&gt;$canRunInst&lt;/span&gt; more instances.&lt;/div&gt;
 #end
 &lt;input type='hidden' id='usage' value='$usage.toString()'/&gt;
 &lt;div class="chart"&gt;
   &lt;canvas id="cpu" width="70" height="70"&gt;&lt;/canvas&gt;
   &lt;div&gt;VCPUs&lt;/div&gt;
-  &lt;div&gt;Used $usage.get('totalCoresUsed') of $usage.get('maxTotalCores')&lt;/div&gt;
+  &lt;div&gt;Used &lt;span class="amount-used"&gt;$usage.get('totalCoresUsed')&lt;/span&gt; of $usage.get('maxTotalCores')&lt;/div&gt;
 &lt;/div&gt;
 &lt;div class="chart"&gt;
   &lt;canvas id="ram" width="70" height="70"&gt;&lt;/canvas&gt;
   &lt;div&gt;RAM&lt;/div&gt;
-  &lt;div&gt;Used $usage.get('totalRAMUsed')GB of $usage.get('maxTotalRAMSize')GB&lt;/div&gt;
+  &lt;div&gt;Used &lt;span class="amount-used"&gt;$usage.get('totalRAMUsed')&lt;/span&gt;GB of $usage.get('maxTotalRAMSize')GB&lt;/div&gt;
 &lt;/div&gt;
 &lt;div class="chart"&gt;
   &lt;canvas id="inst" width="70" height="70"&gt;&lt;/canvas&gt;
   &lt;div&gt;Instances&lt;/div&gt;
-  &lt;div&gt;Used $usage.get('totalInstancesUsed') of $usage.get('maxTotalInstances')&lt;/div&gt;
+  &lt;div&gt;Used &lt;span class="amount-used"&gt;$usage.get('totalInstancesUsed')&lt;/span&gt; of $usage.get('maxTotalInstances')&lt;/div&gt;
 &lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="clear-floats"&gt;
 &lt;/div&gt;
 {{/html}}
 ##
@@ -241,7 +246,24 @@ var repos = [
 
 var usage = JSON.parse($('usage').value);
 
+var usagePerInstance = {
+    totalCoresUsed: usage.requiredCores,
+    totalRAMUsed: usage.requiredRAM,
+    totalInstancesUsed: 1,
+    spaceForInst: -1
+}
+
 var selects = {};
+
+var updateAll = function() {
+    // TODO: refresh all data using JS
+    $('xwikicontent').innerHTML = "Reloading...";
+    location.reload();
+}
+
+var uploadingNotification = new XWiki.widgets.Notification('uploading dataset...', 'inprogress', {"inactive": true});
+var deletingNotification = new XWiki.widgets.Notification('deleting a VM...', 'inprogress', {"inactive": true});
+var creatingNotification = new XWiki.widgets.Notification('creating a VM...', 'inprogress', {"inactive": true});
 
 var createCORSRequest = function(method, url) {
     var xhr = new XMLHttpRequest();
@@ -277,6 +299,16 @@ var generateBranchSelect = function (repo, jsonArray) {
 
 var requestReposInfo = function () {
   var requested = 0;
+
+  // HACK: don't hammer GitHub with branch requests if branch selection is disabled: just fake master-master-master
+  if ($$(".branch-select")[0].hasClassName("disabled-branch-select")) {
+      repos.each(function (repo) {
+          selects[repo] = generateBranchSelect(repo, [{"name": "master"}]);
+      });
+      updateUI();
+      return;
+  }
+
   repos.each(function (repo) {
     var xhr = createCORSRequest('GET', BASE_API_URL + repo + '/branches?per_page=100');
     if (!xhr) { return; } // CORS not supported
@@ -299,7 +331,23 @@ var requestReposInfo = function () {
     };
 
     xhr.send();
+
+    if (xhr.status === 403) {
+        alert("Error getitn gbranches form GitHub - probably too many reuqests were sent in a short time. Please wait and retry");
+    }
   });
+}
+
+var showActionResultNotification = function(text, actionOnYes) {
+    behavior = {
+        onYes: function() {
+            actionOnYes &amp;&amp; actionOnYes();
+       }
+    };
+    var dialogParameters = {
+        confirmationText: text,
+    };
+    var actionPerformedDialog = new XWiki.widgets.InfoBox(behavior, dialogParameters);
 }
 
 var attachServerDeleteListeners = function () {
@@ -319,18 +367,23 @@ var attachServerDeleteListeners = function () {
                   },
                   method: "get",
                   onCreate : function() {
-                      console.log('Sending');
+                      console.log('Sending delete request');
+                      deletingNotification.show();
                   },
                   onSuccess: function(response) {
-                      console.log('Success');
-                      //item.up('tr').hide();
-                      location.reload();
+                      console.log('Delete request: Success');
+                      if (response.responseJSON &amp;&amp; response.responseJSON.result) {
+                          showActionResultNotification("VM deleted successfully", updateAll);
+                      } else {
+                          showActionResultNotification("Failed to delete the VM");
+                      }
                   },
                   onComplete : function() {
-                      console.log('Complete');
+                      console.log('Delete request: Complete');
+                      deletingNotification.hide();
                   },
                   onFailure : function() {
-                      console.log('Failed');
+                      console.log('Delete request: Failed');
                   }
                 },
                 /* Interaction parameters */
@@ -361,16 +414,23 @@ var attachLoadDataListeners = function () {
                 },
                 method: "get",
                 onCreate : function() {
-                    console.log('Sending');
+                    console.log('Load data: sending');
+                    uploadingNotification.show();
                 },
                 onSuccess: function(response) {
-                    console.log('Success');
+                    console.log('Load data: got response');
+                    if (response.responseJSON &amp;&amp; response.responseJSON.result) {
+                        showActionResultNotification("Dataset uploaded successfully");
+                    } else {
+                        showActionResultNotification("Failed to upload dataset");
+                    }
                 },
                 onComplete : function() {
-                    console.log('Complete');
+                    console.log('Load data: Complete');
+                    uploadingNotification.hide();
                 },
                 onFailure : function() {
-                    console.log('Failed');
+                    console.log('Load data: Failed');
                 }
             });
         }
@@ -380,6 +440,9 @@ var attachLoadDataListeners = function () {
 
 var selectProject = function(name) {
     var isPT = (name == "PhenoTips");
+    if (!$('repo-select-phenotips')) {
+        console.log("Branches not found");
+    }
     $('repo-select-phenotips').disabled = !isPT;
     $('repo-select-phenotips').up().style.opacity = isPT ? 1 : 0.3;
     $('repo-select-patient-network').disabled = isPT;
@@ -424,64 +487,80 @@ var updateUI = function () {
     container.insert(button.insert(buttonA));
 
     var deploying = false;
-
     var onDeploy = function (event) {
         if (deploying) {
             return;
         }
-        new Ajax.Request(SERVICE_URL, {
-            parameters: {
+        var deployParameters = {
+                'action'       : 'deploy',
                 'pnBranchName' : $('repo-select-patient-network').value,
                 'rmBranchName' : $('repo-select-remote-matching').value,
                 'pcBranchName' : $('repo-select-phenomecentral.org').value,
                 'ptBranchName' : $('repo-select-phenotips').value,
                 'buildName'    : $('deploy-name').value,
                 'project'      : $$('input[name="project"]:checked')[0].value
-            },
+        };
+
+        new Ajax.Request(SERVICE_URL, {
+            parameters: deployParameters,
             method: "get",
             onCreate : function() {
                 deploying = true;
-                console.log('Sending');
-                $('deploy').addClassName("disabled-button");
-                behavior = {};
-                var dialogParameters = {
-                      confirmationText: "A request to start a new VM will be sent - see deployment log for progress details",
-                      yesButtonText: "OK",
-                      noButtonText: ""
-                };
-                var actionPerformedDialog = new XWiki.widgets.ConfirmationBox(behavior, dialogParameters);
-                //setTimeout(function() { window.open("../resources/latest_deploy.log");}, 500);
+                console.log('Sending deploy request: ' + JSON.stringify(deployParameters));
+
+                $$(".branch-select")[0].addClassName("disabled-branch-select");
+                creatingNotification.show();
+
+                // mark resources as used
+                for (var prop in usagePerInstance) {
+                    if (usagePerInstance.hasOwnProperty(prop)) {
+                        usage[prop] += usagePerInstance[prop];
+                    }
+                }
+                drawPiCharts();
             },
             onSuccess: function(response) {
-                console.log('Success');
-                behavior = {
-                    onYes: function() {
-                        $('xwikimaincontainerinner').hide();
-                        location.reload();
+                console.log('Deploy request: got response');
+                if (response.responseJSON &amp;&amp; response.responseJSON.result) {
+                    showActionResultNotification("A new test VM has been deployed. The page will be refreshed now to reflect the changes.", updateAll);
+                } else {
+                    // mark resouces as returned
+                    for (var prop in usagePerInstance) {
+                        if (usagePerInstance.hasOwnProperty(prop)) {
+                            usage[prop] -= usagePerInstance[prop];
+                        }
                     }
-                };
-                var dialogParameters = {
-                      confirmationText: "A new test VM has been deployed. The page will be refreshed now to reflect the changed. ",
-                      yesButtonText: "OK",
-                      noButtonText: ""
-                };
-                var actionPerformedDialog = new XWiki.widgets.ConfirmationBox(behavior, dialogParameters);
+                    drawPiCharts();
+                    showActionResultNotification("Deployment failed");
+                }
             },
             onComplete : function() {
-                console.log('Complete');
-                $('deploy').removeClassName("disabled-button");
+                console.log('Deploy request: complete');
+                $$(".branch-select")[0].removeClassName("disabled-branch-select");
+                creatingNotification.hide();
                 deploying = false;
             }
         });
     };
 
-    button.observe('click', onDeploy);
+    var confirmDeploy = function() {
+        behavior = {
+            onYes: function() { onDeploy(); }
+        };
+        var dialogParameters = {
+            confirmationText: "A request to start a new VM will be sent - see deployment log for progress details",
+            yesButtonText: "OK",
+            noButtonText: "Cancel"
+        };
+        var actionPerformedDialog = new XWiki.widgets.ConfirmationBox(behavior, dialogParameters);
+    }
+
+    button.observe('click', confirmDeploy);
 
     selectProject("PhenomeCentral");
 }
 
 var drawPiCharts = function () {
-    var usage = JSON.parse($('usage').value);
     var cpuMax = usage.maxTotalCores;
     var cpuUsed = usage.totalCoresUsed;
     var ramMax = usage.maxTotalRAMSize;
@@ -494,9 +573,15 @@ var drawPiCharts = function () {
     var colors = ["#ddd", "#8aaece"];
     var totals = {'cpu'  : cpuMax, 'ram' : ramMax, 'inst' : instMax};
 
+    $("inst-avail") &amp;&amp; $("inst-avail").update(usage.spaceForInst);
+
     $$('canvas').each( function(canvas) {
-        var ctx = canvas.getContext("2d");
         var data = stats[canvas.id];
+
+        canvas.up().down(".amount-used") &amp;&amp; canvas.up().down(".amount-used").update(data[1]);
+
+        var ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         var center = [canvas.width / 2, canvas.height / 2];
         var radius = Math.min(canvas.width, canvas.height) / 2;
         var lastPosition = 60, total = totals[canvas.id];
@@ -514,12 +599,153 @@ var drawPiCharts = function () {
 }
 
 document.observe('xwiki:dom:loaded', function() {
-    if (container != '') {
-        requestReposInfo();
-    }
+    requestReposInfo();
     attachButtonHandlers();
     drawPiCharts();
 });</code>
+    </property>
+    <property>
+      <name></name>
+    </property>
+    <property>
+      <parse/>
+    </property>
+    <property>
+      <use>currentPage</use>
+    </property>
+  </object>
+  <object>
+    <name>PhenomeCentral.PCTestDeplymentConfiguration</name>
+    <number>1</number>
+    <className>XWiki.JavaScriptExtension</className>
+    <guid>4521dd24-2e6d-4402-9dd4-65e70e217d82</guid>
+    <class>
+      <name>XWiki.JavaScriptExtension</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <cache>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>cache</name>
+        <number>5</number>
+        <prettyName>Caching policy</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators> ,|</separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>long|short|default|forbid</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </cache>
+      <code>
+        <disabled>0</disabled>
+        <name>code</name>
+        <number>2</number>
+        <prettyName>Code</prettyName>
+        <rows>20</rows>
+        <size>50</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </code>
+      <name>
+        <disabled>0</disabled>
+        <name>name</name>
+        <number>1</number>
+        <prettyName>Name</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </name>
+      <parse>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>yesno</displayType>
+        <name>parse</name>
+        <number>4</number>
+        <prettyName>Parse content</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </parse>
+      <use>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>use</name>
+        <number>3</number>
+        <prettyName>Use this extension</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators> ,|</separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>currentPage=Always on this page|onDemand=On demand|always=Always on this wiki</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </use>
+    </class>
+    <property>
+      <cache>long</cache>
+    </property>
+    <property>
+      <code>// Make sure the XWiki 'namespace' and the ModalPopup class exist.
+if(typeof(XWiki) == "undefined" || typeof(XWiki.widgets) == "undefined" || typeof(XWiki.widgets.ModalPopup) == "undefined") {
+  if (typeof console != "undefined" &amp;&amp; typeof console.warn == "function") {
+    console.warn("[MessageBox widget] Required class missing: XWiki.widgets.ModalPopup");
+  }
+} else {
+
+XWiki.widgets.InfoBox = Class.create(XWiki.widgets.ModalPopup, {
+  /** Default displayed texts */
+  defaultInteractionParameters : {
+    confirmationText: "-",
+    yesButtonText: "OK",
+  },
+  /** Constructor. Registers the key listener that pops up the dialog. */
+  initialize : function($super, behavior, interactionParameters) {
+    this.interactionParameters = Object.extend(Object.clone(this.defaultInteractionParameters), interactionParameters || {});
+    $super(
+      this.createContent(this.interactionParameters),
+      {
+        "show"  : { method : this.showDialog,  keys : [] },
+        "yes"   : { method : this.onYes,       keys : ['Enter', 'Space', 'Esc'] },
+        "close" : { method : this.closeDialog, keys : [] }
+      },
+      {
+         displayCloseButton : false,
+         removeOnClose : true
+      }
+    );
+    this.showDialog();
+    this.setClass("confirmation");
+    this.behavior = behavior || { };
+  },
+  /** Create the content of the confirmation dialog: icon + question text, buttons */
+  createContent : function (data) {
+    var question = new Element("div", {"class" : "question"}).update(data.confirmationText);
+    var buttons = new Element("div", {"class" : "buttons"});
+    var yesButton = this.createButton("button", data.yesButtonText, "(Enter)", "");
+    buttons.insert(yesButton);
+    var content =  new Element("div");
+    content.insert(question).insert(buttons);
+    Event.observe(yesButton, "click", this.onYes.bindAsEventListener(this));
+    return content;
+  },
+  onYes : function() {
+    this.closeDialog();
+    if (typeof (this.behavior.onYes) == 'function') {
+      this.behavior.onYes();
+    }
+  }
+});
+} // if the parent widget is defined
+</code>
     </property>
     <property>
       <name></name>
@@ -674,7 +900,7 @@ document.observe('xwiki:dom:loaded', function() {
 }
 .projects {
   font-weight: 700;
-  margin: 1em 11em;
+  margin: 1em 5em 1em 11em;
 }
 .projects label {
   margin-right: 0.5em;
@@ -688,29 +914,40 @@ document.observe('xwiki:dom:loaded', function() {
 .box.infomessage a:link, .box.infomessage a:visited {
   color: #336699;
 }
-.disabled-button {
-  background-color: #999 !important;
-  background-image: none !important;
-  border: 1px solid #CCC !important;
-  text-shadow: none !important;
-  pointer-events: none !important;
-}
 .chart {
   display: inline-block;
   text-align: center;
   margin: 1em;
   font-size: 12px;
 }
+.clear-floats {
+  clear: both;
+}
+.branch-select {
+  display: inline-block;
+  margin-right: 2em;
+}
+.disabled-branch-select {
+  opacity: 0.2;
+  pointer-events: none;
+}
+.no-user-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
 #stats-content {
   display: inline-block;
-  margin-left: 9em;
+  /*margin-left: 9em;
   top: 5.2em;
-  position: absolute;
+  position: absolute;*/
   text-align: center;
   border: 1px dotted #D7DEE3;
   border-radius: 4px;
   padding: 5px 10px;
   max-width : 35em;
+  float: right;
 }
 #deploy-content {
   display: inline-block;

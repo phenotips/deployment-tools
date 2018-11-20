@@ -48,6 +48,12 @@ sudo yum -y install python36u-pip
 sudo pip3.6 install --upgrade pip
 sudo pip3.6 install gitpython
 ```
+- NOTE: Maven 3.5+ is required for PT 1.5 and newer. CeontOS7 has an older version, so instead of simple "yum install maven" need to:
+```
+sudo wget http://repos.fedorapeople.org/repos/dchen/apache-maven/epel-apache-maven.repo -O /etc/yum.repos.d/epel-apache-maven.repo
+sudo yum update
+sudo yum install apache-maven
+```
 - TODO: `exomiser` instalation
 - Get the [pc_deploy_build_inside_vm.py](scripts/pc_deploy_build_inside_vm.py) file from this repository into the VM. Make sure `VM_METADATA_URL` variable is set correctly (it is used to get VM metadata).
 - There is no need to install openstack client utilities inside the VM, the only communication between the VM and OpenStack is via a request to the URl specified in `VM_METADATA_URL`
@@ -69,3 +75,13 @@ WantedBy=default.target
 ```
   - systemctl daemon-reload
   - systemctl enable servicename.service
+
+Optional: the same can be done for [pc_deploy_logserver.sh](scripts/pcdeploy-baseimage/pc_deploy_logserver.sh) to start a logserver to be able to see build/instance logs
+
+Optional: replace postfix with FakeSMTP:
+1) remove postfix, download FakeSMTP:
+```
+sudo yum remove postfix
+wget http://nilhcem.github.com/FakeSMTP/downloads/fakeSMTP-latest.zip
+```
+2) install a service for [pc_deploy_fakesmtp.sh](scripts/pcdeploy-baseimage/pc_deploy_fakesmtp.sh)

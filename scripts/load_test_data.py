@@ -47,15 +47,18 @@ DATASETS_LIST_FILENAME = 'datasets_list.txt'
 # PC settings
 #######################################################
 DEFAULT_SERVER_PORT = "8080"
+DEFAULT_MAIL_SENDING_PORT = "2525"
 CREDENTIALS = 'Admin:admin'
 CONSENT_URL = '/rest/patients/{0}/consents/assign'
 GRANT_CONSENT_NAMES = ["real", "genetic", "share_history", "share_images", "matching"]
 PATIENTS_REST_URL = '/rest/patients'
 PATIENTS_REINDEX_REST_URL = '/rest/patients/reindex'
+XWIKI_PREFERENCES_URL = "/admin/XWiki/XWikiPreferences"
 XAR_UPLOAD_URL = '/upload/XWiki/XWikiPreferences'
 XAR_IMPORT_URL = '/import/XWiki/XWikiPreferences?'
 PROCESSED_EXOMISER_FILES_SRC_PATH = "exomiser"
 PROCESSED_EXOMISER_FILES_DEST_PATH = "/home/pcinstall/deploy/phenomecentral-standalone-1.2-SNAPSHOT/data/exomiser"
+MAIL_SENDING_CONFIG_URL = "/saveandcontinue/Mail/MailConfig?"
 #######################################################
 
 
@@ -82,6 +85,9 @@ def upload_data(settings):
 
     # authorise
     session = get_session(settings)
+
+    # set mail sending port to DEFAULT_MAIL_SENDING_PORT
+    set_mail_sending_port(settings, session)
 
     # load and, if upload is successful, import XAR file to the running instance
     upload_xar(settings, session, DATA_XAR_FILENAME)
@@ -138,7 +144,28 @@ def get_session(settings):
     base_url = compose_url(settings, '')
     logging.info('Using base server URL {0}'.format(base_url))
     session.head(base_url)
+
+    # Parse form token: it is the same for all pages in the session (e.g. XAR import, MAIL setting, etc.)
+    get_form_token(settings, session)
+
     return session
+
+
+def get_form_token(settings, session):
+    # Parsing form token
+    xwiki_preferences_url = compose_url(settings, XWIKI_PREFERENCES_URL)
+    result = session.get(xwiki_preferences_url)
+    if result.status_code != 200:
+        logging.error("Can't access preferences page {0}, status code {1}".format(xwiki_preferences_url, result.status_code))
+        sys.exit(-5)
+
+    form_token_match = re.search('name="form_token" content="(.*)"', result.text)
+    if not form_token_match:
+        logging.error("Form token not parsed")
+        sys.exit(-6)
+    else:
+        logging.info("* form token: {0}".format(form_token_match.group(1)))
+    settings.form_token = form_token_match.group(1)
 
 
 def upload_json_patients(settings, session):
@@ -167,7 +194,7 @@ def internal_upload_patient_json(settings, session, json_file_name):
         return
 
     # sample data
-    #payload = {
+    # payload = {
     #    "clinicalStatus" : "affected",
     #    "genes" : [
     #        {"gene":"T", "id":"ENSG00000164458", "status":"candidate"}
@@ -221,25 +248,11 @@ def upload_xar(settings, session, xar_file_name):
 
     logging.info('Uploading XAR {0} to the server...'.format(full_file_name))
 
-    # Parsing form token
-    xar_import_url = compose_url(settings, XAR_IMPORT_URL)
-    result = session.get(xar_import_url)
-    if result.status_code != 200:
-        logging.error("Can't access XAR upload page {0}, status code {1}".format(xar_import_url, result.status_code))
-        sys.exit(-5)
-
-    form_token_match = re.search('name="form_token" content="(.*)"', result.text)
-    if not form_token_match:
-        logging.error("Can't upload xar, form token not parsed")
-        sys.exit(-6)
-    else:
-        logging.info("* form token: {0}".format(form_token_match.group(1)))
-
     # Prepare XAR payload for upload
     m_enc = MultipartEncoder( fields={
             'filepath': (xar_file_name, open(full_file_name, 'rb')),
             'xredirect': '/import/XWiki/XWikiPreferences?editor=globaladmin&section=Import',
-            'form_token': form_token_match.group(1)} )
+            'form_token': settings.form_token} )
 
     xar_upload_url = compose_url(settings, XAR_UPLOAD_URL)
     req = session.post(xar_upload_url, data=m_enc, headers={'Content-Type': m_enc.content_type}, allow_redirects=False)
@@ -289,6 +302,21 @@ def import_xar_files(settings, session, full_file_name, xar_file_name):
         # logging.error(d.decode('utf-8'))
 
 
+def set_mail_sending_port(settings, session):
+    logging.info('Setting mail sending port to {0}...'.format(DEFAULT_MAIL_SENDING_PORT))
+
+    payload = 'classname=Mail.SendMailConfigClass&formactionsac=Save&Mail.SendMailConfigClass_0_from=noreply%40phenomecentral.ccm.sickkids.ca&Mail.SendMailConfigClass_0_bcc=&Mail.SendMailConfigClass_0_host=127.0.0.1&Mail.SendMailConfigClass_0_port=' + DEFAULT_MAIL_SENDING_PORT + '&Mail.SendMailConfigClass_0_username=&Mail.SendMailConfigClass_0_password=&Mail.SendMailConfigClass_0_properties=&Mail.SendMailConfigClass_0_sendWaitTime=&Mail.SendMailConfigClass_0_discardSuccessStatuses=&form_token=' + settings.form_token;
+
+    headers = {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'}
+    mail_sending_url = compose_url(settings, MAIL_SENDING_CONFIG_URL)
+
+    req = session.post(mail_sending_url + payload, headers=headers)
+    if req.status_code in [200, 201]:
+        logging.info('Configured mail sending port to {0}'.format(DEFAULT_MAIL_SENDING_PORT))
+    else:
+        logging.error('Error: Configuring mail sending port to {0} failed {1}'.format(DEFAULT_MAIL_SENDING_PORT, req.status_code))
+        # do nothing: this is not a critical error
+
 def setup_logfile(settings):
     if settings.action == 'list-datasets':
         log_name = "dataset_list.log"
@@ -309,7 +337,7 @@ def setup_logfile(settings):
     console.setFormatter(logging.Formatter('[SCRIPT] %(levelname)s: %(message)s'))
     logging.getLogger('').addHandler(console)
 
-    if web_accessible_log_file is not None:
+    if web_accessible_log_file is not None and os.path.isfile(web_accessible_log_file):
         open(web_accessible_log_file, 'w').close()
         # clone output to "latest log" file
         web_accessible_log = logging.FileHandler(web_accessible_log_file)

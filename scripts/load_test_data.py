@@ -265,7 +265,7 @@ def upload_xar(settings, session, xar_file_name):
         logging.info('* uploaded xar file: {0}'.format(full_file_name))
         import_xar_files(settings, session, full_file_name, xar_file_name)
     else:
-        logging.error('Unexpected response ({0}) from uploading XAR file {1}'.format(req.status_code, filename))
+        logging.error('Unexpected response ({0}) from uploading XAR file {1}'.format(req.status_code, xar_file_name))
         sys.exit(-7)
 
 def import_xar_files(settings, session, full_file_name, xar_file_name):

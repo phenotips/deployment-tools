@@ -38,6 +38,24 @@
   <syntaxId>xwiki/2.1</syntaxId>
   <hidden>false</hidden>
   <content>{{velocity}}
+#macro (__jira $branchName)
+  #set ($patternStr = '[A-Z]++-\d++')
+  #set ($issueIdPattern = $regextool.compile($patternStr))
+  #set ($matcher = $issueIdPattern.matcher($branchName))
+  #if ($matcher.find())
+    #set ($issueId = "$!matcher.group()")
+    #set ($issueURL = "https://phenotips.atlassian.net/browse/$!{issueId}")
+    #set ($issueApiURL = "https://phenotips.atlassian.net/rest/api/3/issue/$!{issueId}?fields=summary")
+    #set ($issueData = $xwiki.getURLContent($issueApiURL))
+    #set ($issueJson = $jsontool.parse($issueData))
+    #set ($issueSummary = "$!{issueJson.fields.summary}")
+[[$issueId&gt;&gt;${issueURL}||rel="__blank" title="$!{issueSummary}" class="issue"]]
+  #set($branchName-1 = $branchName.replace($issueId, ''))
+  #__jira($branchName-1)
+  #end
+#end
+##
+##
 $xwiki.jsx.use('PhenomeCentral.PCTestDeplymentConfiguration')##
 $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
 ##
@@ -110,7 +128,7 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
 == Running test servers ==
 #set ($serverList = $serverList.get('servers'))
 ## TABLE HEADER
-#set ($headerNames = ['Server Name', 'Branches', 'IP', 'Started Time', 'Load test data', 'Status', 'Logs', 'Action'])
+#set ($headerNames = ['Server Name', 'Branches', 'Issues', 'IP', 'Started Time', 'Load test data', 'Status', 'Logs', 'Action'])
 (% class="extradata-list server-list-row" %)
 #foreach($headerName in $headerNames)
   |=(% class="col-label" %)$headerName##
@@ -125,15 +143,19 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
   #set($pc = $obj.get('metadata').optString('pc'))
   #set($pt = $obj.get('metadata').optString('pt'))
   #set($pr = $obj.get('metadata').optString('pr'))
+  #if ($pr == "PhenomeCentral")
+    #set ($branches = {'PN': "$!pn", 'RM' : "$!rm", 'PC' : "$!pc"}) 
+  #else
+    #set ($branches = {'PT' : "$!pt"})
+  #end
   (% class="extradata-list server-list-row" %)##
   |(% class="server-name" %)$escapetool.xml($obj.get('name'))##
-  |(% class="branches" %){{html clean="false"}}#if("${pr}" == "PhenomeCentral")##
-                                           #if("${pn}" != "")PN: &lt;span class="code"&gt;$pn&lt;/span&gt;#end##
-                                           #if("${rm}" != ""), RM: &lt;span class="code"&gt;$rm&lt;/span&gt;#end##
-                                           #if("${pc}" != ""), PC: &lt;span class="code"&gt;$pc&lt;/span&gt;#end##
-                                           #else##
-                                             #if("${pt}" != "")PT: &lt;span class="code"&gt;$pt&lt;/span&gt;#end##
-                                           #end{{/html}}##
+  |(% class="branches" %){{html clean="false"}}#foreach ($b in $branches.keySet())
+                                                 #if("$!branches.get($b)" != "") ${b}: &lt;span class="code"&gt;$!branches.get($b)&lt;/span&gt;#end##
+                                               #end{{/html}}##
+  |(% class="issues" %)(((#foreach ($b in $branches.keySet())
+                             #__jira($!branches.get($b))
+                          #end)))##
   |(% class="ip" %){{html clean="false"}}&lt;a href="http://$escapetool.xml($obj.get('ip')):8080" target="_blank"&gt;$escapetool.xml($obj.get('ip'))&lt;/a&gt;{{/html}}##
   |(% class="begin-time" %)$!{beginTime}##
   |(% class="load-test-data" %)#if($obj.get('status') == "active"){{html clean="false"}}##
@@ -142,8 +164,8 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
   &lt;/select&gt;##
   &lt;span class="buttonwrapper"&gt;&lt;a class="button load-data" href="$obj.get('ip')"&gt;&lt;span class="fa fa-cloud-upload"&gt; &lt;/span&gt;&lt;span&gt;Load&lt;/span&gt;&lt;/a&gt;&lt;/span&gt;{{/html}}#end##
   |(% class="run-status $completedCSS" %)$obj.get('status')##
-  |(% class="logs" %)#if($obj.get('status') == "active"){{html clean="false"}}&lt;a href="http://$escapetool.xml($obj.get('ip')):8080/resources/serverlog.txt" target="_blank">instance log&lt;/a&gt;
-                     &lt;br&gt;&lt;a href="http://$escapetool.xml($obj.get('ip')):8090/deploy.log" target="_blank">deploy log&lt;/a&gt;#if("${pc}" != "")&lt;font color="#999"&gt; | &lt;/font&gt;&lt;a href="http://$escapetool.xml($obj.get('ip')):8090/FakeSMTP/received-emails/" target="_blank">emails&lt;/a&gt;#end{{/html}}#end##
+  |(% class="logs" %)#if($obj.get('status') == "active"){{html clean="false"}}&lt;a href="http://$escapetool.xml($obj.get('ip')):8080/resources/serverlog.txt" target="_blank"&gt;instance log&lt;/a&gt;
+                     &lt;br&gt;&lt;a href="http://$escapetool.xml($obj.get('ip')):8090/deploy.log" target="_blank"&gt;deploy log&lt;/a&gt;#if("${pc}" != "")&lt;font color="#999"&gt; | &lt;/font&gt;&lt;a href="http://$escapetool.xml($obj.get('ip')):8090/FakeSMTP/received-emails/" target="_blank"&gt;emails&lt;/a&gt;#end{{/html}}#end##
   |(% class="action-delete" %){{html clean="false"}}&lt;span class="buttonwrapper"&gt;&lt;a class="button delete-server" href="$obj.get('name')"&gt;&lt;span class="fa fa-trash"&gt; &lt;/span&gt;&lt;span&gt;Delete&lt;/span&gt;&lt;/a&gt;&lt;/span&gt;{{/html}}
 #end
 
@@ -883,6 +905,16 @@ XWiki.widgets.InfoBox = Class.create(XWiki.widgets.ModalPopup, {
 .viewbody .server-list-row td {
   text-align: left;
   line-height: 2em;
+}
+td.issues .issue {
+  white-space: nowrap;
+  display: inline-block;
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  border: 1px solid blue;
+  color: blue !important;
+  font-size: 85%;
+  margin-bottom: .2em;
 }
 .code {
   padding: 0.2em 0.4em;

@@ -143,6 +143,12 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
   #set($pc = $obj.get('metadata').optString('pc'))
   #set($pt = $obj.get('metadata').optString('pt'))
   #set($pr = $obj.get('metadata').optString('pr'))
+  #set($branchRepos = {
+    'PT': 'phenotips',
+    'PN': 'patient-netwoek',
+    'RM': 'remote-matching',
+    'PC': 'phenomecentral.org'
+  })
   #if ($pr == "PhenomeCentral")
     #set ($branches = {'PN': "$!pn", 'RM' : "$!rm", 'PC' : "$!pc"}) 
   #else
@@ -151,10 +157,10 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
   (% class="extradata-list server-list-row" %)##
   |(% class="server-name" %)$escapetool.xml($obj.get('name'))##
   |(% class="branches" %){{html clean="false"}}#foreach ($b in $branches.keySet())
-                                                 #if("$!branches.get($b)" != "") ${b}: &lt;span class="code"&gt;$!branches.get($b)&lt;/span&gt;#end##
+                                                 #if("$!branches.get($b)" != "") ${b}: &lt;span class="code"&gt;&lt;a href="https://github.com/phenotips/$!{branchRepos.get($b)}/tree/$!{branches.get($b)}" target="_blank"&gt;$!branches.get($b)&lt;/a&gt;&lt;/span&gt;#end##
                                                #end{{/html}}##
-  |(% class="issues" %)(((#foreach ($b in $branches.keySet())
-                             #__jira($!branches.get($b))
+  |(% class="issues" %)(((#foreach ($bName in $branches.values())
+                             #__jira($!bName)
                           #end)))##
   |(% class="ip" %){{html clean="false"}}&lt;a href="http://$escapetool.xml($obj.get('ip')):8080" target="_blank"&gt;$escapetool.xml($obj.get('ip'))&lt;/a&gt;{{/html}}##
   |(% class="begin-time" %)$!{beginTime}##

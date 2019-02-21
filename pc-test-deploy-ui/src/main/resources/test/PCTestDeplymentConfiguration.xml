@@ -145,7 +145,7 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
   #set($pr = $obj.get('metadata').optString('pr'))
   #set($branchRepos = {
     'PT': 'phenotips',
-    'PN': 'patient-netwoek',
+    'PN': 'patient-network',
     'RM': 'remote-matching',
     'PC': 'phenomecentral.org'
   })

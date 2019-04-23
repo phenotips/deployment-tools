@@ -45,11 +45,15 @@
   #if ($matcher.find())
     #set ($issueId = "$!matcher.group()")
     #set ($issueURL = "https://phenotips.atlassian.net/browse/$!{issueId}")
-    #set ($issueApiURL = "https://phenotips.atlassian.net/rest/api/3/issue/$!{issueId}?fields=summary")
+    #set ($issueApiURL = "https://phenotips.atlassian.net/rest/api/3/issue/$!{issueId}?fields=summary,status")
     #set ($issueData = $xwiki.getURLContent($issueApiURL))
     #set ($issueJson = $jsontool.parse($issueData))
     #set ($issueSummary = "$!{issueJson.fields.summary}")
-[[$issueId&gt;&gt;${issueURL}||rel="__blank" title="$!{issueSummary}" class="issue"]]
+    #set ($issueStatus = "$!{issueJson.fields.status.name}")
+    #if ("$!issueStatus" != '')
+      #set ($issueStatus = " ($!{issueStatus})")
+    #end
+[[$issueId$!{issueStatus}>>${issueURL}||rel="__blank" title="$!{issueSummary}" class="issue"]]
   #set($branchName_1 = $branchName.replace($issueId, ''))
   #__jira($branchName_1)
   #end

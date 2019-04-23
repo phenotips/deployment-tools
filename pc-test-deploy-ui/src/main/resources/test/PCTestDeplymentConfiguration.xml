@@ -50,8 +50,8 @@
     #set ($issueJson = $jsontool.parse($issueData))
     #set ($issueSummary = "$!{issueJson.fields.summary}")
 [[$issueId&gt;&gt;${issueURL}||rel="__blank" title="$!{issueSummary}" class="issue"]]
-  #set($branchName-1 = $branchName.replace($issueId, ''))
-  #__jira($branchName-1)
+  #set($branchName_1 = $branchName.replace($issueId, ''))
+  #__jira($branchName_1)
   #end
 #end
 ##

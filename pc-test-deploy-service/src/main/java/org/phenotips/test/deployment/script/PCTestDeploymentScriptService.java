@@ -39,7 +39,7 @@ import org.slf4j.Logger;
 /**
  * Allows spinning, monitoring and managing OpenStack VMs for customized test PhenomeCentral builds via Python scripts.
  *
- * @version $Id: d9a7db2d905d386d7e8ff3878095b0ec6c61db32 $
+ * @version $Id$
  * @since 1.2
  */
 @Unstable

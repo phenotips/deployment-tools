@@ -32,7 +32,7 @@ import javax.ws.rs.core.Response;
 /**
  * Default implementation of the {@link PatientReindexResource}.
  *
- * @version $Id: 8afa6c9c7daa868f7c3b1fe50289dfa17d3b510b $
+ * @version $Id$
  * @since 1.1
  */
 @Component

@@ -31,7 +31,7 @@ import javax.ws.rs.core.Response;
 /**
  * Reindex patients. Needed because Solr does not triggered on XAR import and imported patients are not indexed.
  *
- * @version $Id: 4aedac8a38e3db2e746c5925cc00c29d6730e28e $
+ * @version $Id$
  * @since 1.1
  */
 @Unstable("New API introduced in 1.2")

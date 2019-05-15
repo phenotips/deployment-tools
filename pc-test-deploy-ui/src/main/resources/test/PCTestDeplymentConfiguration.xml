@@ -286,6 +286,7 @@ var usagePerInstance = {
 }
 
 var selects = {};
+var brunchRequestError = '';
 
 var updateAll = function() {
     // TODO: refresh all data using JS
@@ -329,6 +330,14 @@ var generateBranchSelect = function (repo, jsonArray) {
     return selectDiv;
 }
 
+var generateBranchInput = function (repo) {
+    var repoLink = new Element('a', {'href': BASE_GITREPO_URL + repo, 'target': '_blank'}).update(repo);
+    var selectDiv = new Element('div', {'class' : 'repo-select'}).insert(new Element('label', {'class' : 'repo-label'}).update(repoLink));
+    var select = new Element('input', {'id': 'repo-select-' + repo, 'type' : 'text'});
+    selectDiv.insert(select);
+    return selectDiv;
+}
+
 var requestReposInfo = function () {
   var requested = 0;
 
@@ -349,16 +358,24 @@ var requestReposInfo = function () {
         var response = JSON.parse(xhr.responseText);
         if (response &amp;&amp; Array.isArray(response)) {
             selects[repo] = generateBranchSelect(repo, response);
-            requested++;
-            if (requested == repos.length) {
-                updateUI();
-            }
         } else {
+            selects[repo] = generateBranchInput(repo);
             console.log("[!] Error parsing patient data JSON");
+        }
+        requested++;
+        if (requested == repos.length) {
+            updateUI();
         }
     };
 
     xhr.onerror = function() {
+        brunchRequestError = 'net::ERR_CONNECTION_TIMED_OUT Error while fetching branches info from from GitHub API (probably GitHub API is down)';
+        console.log(brunchRequestError);
+        selects[repo] = generateBranchInput(repo);
+        requested++;
+        if (requested == repos.length) {
+            updateUI();
+        }
         return;
     };
 
@@ -890,6 +907,9 @@ XWiki.widgets.InfoBox = Class.create(XWiki.widgets.ModalPopup, {
 }
 .repo-select select {
   min-width: 17em;
+}
+.repo-select input{
+    width: 17em;
 }
 .repo-label {
   font-weight: 700;

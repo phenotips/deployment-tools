@@ -286,7 +286,7 @@ var usagePerInstance = {
 }
 
 var selects = {};
-var brunchRequestError = '';
+var branchRequestError = '';
 
 var updateAll = function() {
     // TODO: refresh all data using JS
@@ -369,8 +369,8 @@ var requestReposInfo = function () {
     };
 
     xhr.onerror = function() {
-        brunchRequestError = 'net::ERR_CONNECTION_TIMED_OUT Error while fetching branches info from from GitHub API (probably GitHub API is down)';
-        console.log(brunchRequestError);
+        branchRequestError = 'net::ERR_CONNECTION_TIMED_OUT Error while fetching branches info from from GitHub API (probably GitHub API is down)';
+        console.log(branchRequestError);
         selects[repo] = generateBranchInput(repo);
         requested++;
         if (requested == repos.length) {

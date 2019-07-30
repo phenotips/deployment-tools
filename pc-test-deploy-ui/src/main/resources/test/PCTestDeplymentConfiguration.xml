@@ -351,7 +351,8 @@ var usagePerInstance = {
 }
 
 var selects = {};
-var brunchRequestError = '';
+var branchRequestError = '';
+
 
 var updateAll = function() {
     // TODO: refresh all data using JS
@@ -402,6 +403,14 @@ var generateBranchSelector = function (repo, branchesAsJsonArray) {
     return selectDiv;
 }
 
+var generateBranchInput = function (repo) {
+    var repoLink = new Element('a', {'href': BASE_GITREPO_URL + repo, 'target': '_blank'}).update(repo);
+    var selectDiv = new Element('div', {'class' : 'repo-select'}).insert(new Element('label', {'class' : 'repo-label'}).update(repoLink));
+    var select = new Element('input', {'id': 'repo-select-' + repo, 'type' : 'text'});
+    selectDiv.insert(select);
+    return selectDiv;
+}
+
 var requestReposInfo = function () {
   var requested = 0;
 
@@ -434,9 +443,10 @@ var requestReposInfo = function () {
     };
 
     xhr.onerror = function() {
-        brunchRequestError = 'net::ERR_CONNECTION_TIMED_OUT Error while fetching branches info from from GitHub API (probably GitHub API is down)';
-        console.log(brunchRequestError);
+        branchRequestError = 'net::ERR_CONNECTION_TIMED_OUT Error while fetching branches info from from GitHub API (probably GitHub API is down)';
+        console.log(branchRequestError);
         selects[repo] = generateBranchSelector(repo);
+
         requested++;
         if (requested == repos.length) {
             updateUI();

@@ -215,7 +215,7 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
     #set ($discard = $branches.put($depId, $meta.optString($dep.key)))
   #end
   (% class="extradata-list server-list-row" %)##
-  |(% class="server-name" %)$escapetool.xml($obj.get('name'))##
+  |(% class="server-name" %){{html clean="false"}}&lt;a href="http://$escapetool.xml($obj.get('ip')):8080" target="_blank" style="background-color: $crtProject.color"&gt;$escapetool.xml($obj.get('name'))&lt;/a&gt;{{/html}}##
   |(% class="branches" %){{html clean="false"}}#foreach ($projId in $branches.keySet())#__githubBranch($projId $branches.get($projId)) #end{{/html}}##
   |(% class="issues" %)(((#foreach ($bName in $branches.values())
                              #__jira($!bName)
@@ -1085,6 +1085,18 @@ td.issues .issue {
 }
 #stats-container {
   min-height: 15em;
+}
+.server-name a[href] {
+  display: inline-block;
+  padding: .2em .4em;
+  border-radius: 4px;
+  background-color: black;
+  color: white !important;
+}
+a.button.delete-server {
+  background: #cc0000 !important;
+  border-color: #c00;
+  text-shadow: none;
 }
 #xwikilicence {
   display: none;

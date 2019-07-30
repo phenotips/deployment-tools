@@ -38,6 +38,66 @@
   <syntaxId>xwiki/2.1</syntaxId>
   <hidden>false</hidden>
   <content>{{velocity}}
+##
+##
+##
+#set ($activeProjects = {
+    'PatientNetwork': {
+      'key'  : 'pn',
+      'name' : 'Patient network',
+      'url'  : 'https://phenomecentral.org',
+      'main' : false,
+      'repo' : 'phenotips/patient-network',
+      'deps' : [],
+      'base'  : 'pt'
+    },
+    'RemoteMatching': {
+      'key'  : 'rm',
+      'name' : 'Remote matching',
+      'url'  : 'https://phenomecentral.org',
+      'main' : false,
+      'repo' : 'phenotips/remote-matching',
+      'deps' : [],
+      'base'  : 'pt'
+    },
+    'PhenomeCentral': {
+      'key'  : 'pc',
+      'color': '#EA972D',
+      'name' : 'PhenomeCentral',
+      'url'  : 'https://phenomecentral.org',
+      'main' : true,
+      'repo' : 'phenotips/phenomecentral.org',
+      'deps' : ['PatientNetwork', 'RemoteMatching'],
+      'base'  : 'pt'
+    },
+    'PhenoTips': {
+      'key'  : 'pt',
+      'color': '#428bca',
+      'name' : 'PhenoTips',
+      'url'  : 'https://phenotips.org',
+      'main' : true,
+      'repo' : 'phenotips/phenotips',
+      'deps' : [],
+      'base'  : 'pt'
+    }
+  })
+{{html clean=false wiki=false}}
+&lt;input type="hidden" id="active-projects-metadata" value="$escapetool.xml($jsontool.serialize($activeProjects))"/&gt;
+{{/html}}
+
+##
+##
+##
+#macro (__githubBranch $projId $branchName)##
+  #set ($branchProject = $activeProjects.get($projId))
+  #if ("$!branchName" != "" &amp;&amp; "$!branchProject" != "")
+    #set ($branchSource  = "$!branchProject.get('key')")
+    ${branchSource.toUpperCase()}: &lt;span class="code"&gt;&lt;a href="https://github.com/$!{branchProject.get('repo')}/tree/$!{branchName}" target="_blank"&gt;$branchName&lt;/a&gt;&lt;/span&gt;##
+  #end
+#end
+##
+##
+##
 #macro (__jira $branchName)
   #set ($patternStr = '[A-Z]++-\d++')
   #set ($issueIdPattern = $regextool.compile($patternStr))
@@ -53,7 +113,7 @@
     #if ("$!issueStatus" != '')
       #set ($issueStatus = " ($!{issueStatus})")
     #end
-[[$issueId$!{issueStatus}>>${issueURL}||rel="__blank" title="$!{issueSummary}" class="issue"]]
+[[$issueId$!{issueStatus}&gt;&gt;${issueURL}||rel="__blank" title="$!{issueSummary}" class="issue"]]
   #set($branchName_1 = $branchName.replace($issueId, ''))
   #__jira($branchName_1)
   #end
@@ -86,14 +146,18 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
 ##
 {{html}}
 &lt;div class="branch-select no-user-select #if ($message != '')disabled-branch-select#end"&gt;
-  Please, select project and corresponding branches for test build deployment.
+  Please select project and corresponding branches for test build deployment.
   &lt;div class="projects"&gt;
-    &lt;label&gt;
-      &lt;input value="PhenomeCentral" name="project" type="radio" checked="checked"&gt;&lt;a href="http://playground/phenomecentral.org" target="_blank"&gt;PhenomeCentral&lt;/a&gt;
-    &lt;/label&gt;
-    &lt;label&gt;
-      &lt;input value="PhenoTips" name="project" type="radio"&gt;&lt;a href="http://phenotips.org" target="_blank"&gt;PhenoTips&lt;/a&gt;
-    &lt;/label&gt;
+    #set ($isFirst = true)
+    #foreach ($projId in $activeProjects.keySet())
+      #set ($proj = $activeProjects.get($projId))
+      #if ($proj.main)
+        &lt;label&gt;
+          &lt;input value="$projId" name="project" type="radio" #if ($isFirst) checked="checked" #set($isFirst = false)#end&gt;##
+          #if('$!{proj.url}' != '')&lt;a href="$!{proj.url}" target="_blank" #if("$!{proj.color}" != '') style="color: $proj.color !important;"#end&gt;#end${proj.name}#if('$!{proj.url}' != '')&lt;/a&gt;#end
+        &lt;/label&gt;
+      #end
+    #end
   &lt;/div&gt;
   ##
   &lt;div id="deploy-content"&gt;&lt;/div&gt;
@@ -141,28 +205,18 @@ $xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
 ## TABLE BODY
 #set ($datasetList = $services.pcTestDeployment.listTestDatasets())
 #foreach ($obj in $serverList)
-  #set($beginTime = $obj.get('created').replace('T',' ').replace('Z',''))
-  #set($pn = $obj.get('metadata').optString('pn'))
-  #set($rm = $obj.get('metadata').optString('rm'))
-  #set($pc = $obj.get('metadata').optString('pc'))
-  #set($pt = $obj.get('metadata').optString('pt'))
-  #set($pr = $obj.get('metadata').optString('pr'))
-  #set($branchRepos = {
-    'PT': 'phenotips',
-    'PN': 'patient-network',
-    'RM': 'remote-matching',
-    'PC': 'phenomecentral.org'
-  })
-  #if ($pr == "PhenomeCentral")
-    #set ($branches = {'PN': "$!pn", 'RM' : "$!rm", 'PC' : "$!pc"}) 
-  #else
-    #set ($branches = {'PT' : "$!pt"})
+  #set ($beginTime = $obj.get('created').replace('T',' ').replace('Z',''))
+  #set ($meta = $obj.get('metadata'))
+  #set ($crtProjectId = $meta.optString('pr'))
+  #set ($crtProject = $activeProjects.get($crtProjectId))
+  #set ($branches = {$crtProjectId : $meta.optString($crtProject.key)})
+  #foreach ($depId in $crtProject.deps)
+    #set ($dep = $activeProjects.get($depId))
+    #set ($discard = $branches.put($depId, $meta.optString($dep.key)))
   #end
   (% class="extradata-list server-list-row" %)##
-  |(% class="server-name" %)$escapetool.xml($obj.get('name'))##
-  |(% class="branches" %){{html clean="false"}}#foreach ($b in $branches.keySet())
-                                                 #if("$!branches.get($b)" != "") ${b}: &lt;span class="code"&gt;&lt;a href="https://github.com/phenotips/$!{branchRepos.get($b)}/tree/$!{branches.get($b)}" target="_blank"&gt;$!branches.get($b)&lt;/a&gt;&lt;/span&gt;#end##
-                                               #end{{/html}}##
+  |(% class="server-name" %){{html clean="false"}}&lt;a href="http://$escapetool.xml($obj.get('ip')):8080" target="_blank" style="background-color: $crtProject.color"&gt;$escapetool.xml($obj.get('name'))&lt;/a&gt;{{/html}}##
+  |(% class="branches" %){{html clean="false"}}#foreach ($projId in $branches.keySet())#__githubBranch($projId $branches.get($projId)) #end{{/html}}##
   |(% class="issues" %)(((#foreach ($bName in $branches.values())
                              #__jira($!bName)
                           #end)))##
@@ -263,18 +317,29 @@ Frontend (this) server {{html clean="false"}}&lt;a target="_blank" href="../reso
       <cache>long</cache>
     </property>
     <property>
-      <code>var container = $('deploy-content') || '';
+           <code>var container = $('deploy-content') || '';
 
-var BASE_API_URL = 'https://api.github.com/repos/phenotips/';
-var BASE_GITREPO_URL = 'https://github.com/phenotips/';
+var BASE_API_URL = 'https://api.github.com/repos/';
+var BASE_GITREPO_URL = 'https://github.com/';
 var SERVICE_URL = new XWiki.Document('PCTestDeploymentService', 'PhenomeCentral').getURL('get');
 
-var repos = [
-            'phenotips',
-            'patient-network',
-            'remote-matching',
-            'phenomecentral.org'
-            ];
+var activeProjects = JSON.parse($('active-projects-metadata') &amp;&amp; $('active-projects-metadata').value || '{}');
+
+var repos = [];
+var reposMeta = {};
+for (var p in activeProjects) {
+  repos.push(activeProjects[p].repo);
+  reposMeta[activeProjects[p].repo] = activeProjects[p];
+  repoMeta = reposMeta[activeProjects[p].repo];
+  repoMeta.parents = [];
+  repoMeta.projectId = p;
+  for (var pp in activeProjects) {
+    if (activeProjects[pp].deps.indexOf(p) &gt;= 0) {
+      repoMeta.parents.push(pp);
+      repoMeta.color = repoMeta.color || activeProjects[pp].color || '';
+    }
+  }
+}
 
 var usage = JSON.parse($('usage').value);
 
@@ -287,6 +352,7 @@ var usagePerInstance = {
 
 var selects = {};
 var branchRequestError = '';
+
 
 var updateAll = function() {
     // TODO: refresh all data using JS
@@ -315,18 +381,25 @@ var createCORSRequest = function(method, url) {
 };
 
 
-var generateBranchSelect = function (repo, jsonArray) {
-    var repoLink = new Element('a', {'href': BASE_GITREPO_URL + repo, 'target': '_blank'}).update(repo);
+var generateBranchSelector = function (repo, branchesAsJsonArray) {
+    var repoLink = new Element('a', {'href': BASE_GITREPO_URL + repo, 'target': '_blank', style: 'color: ' + reposMeta[repo].color}).update(repo);
     var selectDiv = new Element('div', {'class' : 'repo-select'}).insert(new Element('label', {'class' : 'repo-label'}).update(repoLink));
-    var select = new Element('select', {'id': 'repo-select-' + repo});
-    jsonArray.each(function(branch) {
+    if (branchesAsJsonArray &amp;&amp; branchesAsJsonArray.length &gt; 0) {
+      var select = new Element('select', {'id': 'repo-select-' + repo});
+      branchesAsJsonArray.each(function(branch) {
         var branchData = { 'value': branch.name };
         if (branch.name == "master") {
             branchData["selected"] = true;
         }
         select.insert(new Element('option', branchData).update(branch.name));
-    });
-    selectDiv.insert(select);
+      });
+      selectDiv.insert(select);
+    } else {
+      var input = new Element('input', {'id': 'repo-select-' + repo, 'type' : 'text'});
+      selectDiv.insert(input);
+    }
+    selectDiv.addClassName(reposMeta[repo].projectId);
+    reposMeta[repo].parents.each(function(pp) {selectDiv.addClassName(pp);});
     return selectDiv;
 }
 
@@ -344,7 +417,7 @@ var requestReposInfo = function () {
   // HACK: don't hammer GitHub with branch requests if branch selection is disabled: just fake master-master-master
   if ($$(".branch-select")[0].hasClassName("disabled-branch-select")) {
       repos.each(function (repo) {
-          selects[repo] = generateBranchSelect(repo, [{"name": "master"}]);
+          selects[repo] = generateBranchSelector(repo, [{"name": "master"}]);
       });
       updateUI();
       return;
@@ -353,14 +426,15 @@ var requestReposInfo = function () {
   repos.each(function (repo) {
     var xhr = createCORSRequest('GET', BASE_API_URL + repo + '/branches?per_page=100');
     if (!xhr) { return; } // CORS not supported
+
     // Response handlers
     xhr.onload = function() {
         var response = JSON.parse(xhr.responseText);
         if (response &amp;&amp; Array.isArray(response)) {
-            selects[repo] = generateBranchSelect(repo, response);
+            selects[repo] = generateBranchSelector(repo, response);
         } else {
-            selects[repo] = generateBranchInput(repo);
-            console.log("[!] Error parsing patient data JSON");
+            console.log("[!] Error parsing branch data JSON");
+            selects[repo] = generateBranchSelector(repo);
         }
         requested++;
         if (requested == repos.length) {
@@ -371,7 +445,8 @@ var requestReposInfo = function () {
     xhr.onerror = function() {
         branchRequestError = 'net::ERR_CONNECTION_TIMED_OUT Error while fetching branches info from from GitHub API (probably GitHub API is down)';
         console.log(branchRequestError);
-        selects[repo] = generateBranchInput(repo);
+        selects[repo] = generateBranchSelector(repo);
+
         requested++;
         if (requested == repos.length) {
             updateUI();
@@ -382,7 +457,7 @@ var requestReposInfo = function () {
     xhr.send();
 
     if (xhr.status === 403) {
-        alert("Error getitn gbranches form GitHub - probably too many reuqests were sent in a short time. Please wait and retry");
+        alert("Error getting branches form GitHub - probably too many requests were sent in a short time. Please wait and retry");
     }
   });
 }
@@ -488,18 +563,11 @@ var attachLoadDataListeners = function () {
 
 
 var selectProject = function(name) {
-    var isPT = (name == "PhenoTips");
-    if (!$('repo-select-phenotips')) {
-        console.log("Branches not found");
-    }
-    $('repo-select-phenotips').disabled = !isPT;
-    $('repo-select-phenotips').up().style.opacity = isPT ? 1 : 0.3;
-    $('repo-select-patient-network').disabled = isPT;
-    $('repo-select-patient-network').up().style.opacity = isPT ? 0.3 : 1;
-    $('repo-select-remote-matching').disabled = isPT;
-    $('repo-select-remote-matching').up().style.opacity = isPT ? 0.3 : 1;
-    $('repo-select-phenomecentral.org').disabled = isPT;
-    $('repo-select-phenomecentral.org').up().style.opacity = isPT ? 0.3 : 1;
+    $$('.branch-select .repo-select input[type="text"]:not(#deploy-name), .branch-select .repo-select select').each(function (item) {
+      var isRepoForThisProject = !!item.up('.branch-select .repo-select.' + name);
+      item.disabled = !!!isRepoForThisProject;
+      item.up().style.opacity = isRepoForThisProject ? 1 : 0.3;
+    });
 }
 
 var attachProjectSelectionListeners = function () {
@@ -540,15 +608,16 @@ var updateUI = function () {
         if (deploying) {
             return;
         }
+        var project = $$('input[name="project"]:checked')[0].value;
         var deployParameters = {
                 'action'       : 'deploy',
-                'pnBranchName' : $('repo-select-patient-network').value,
-                'rmBranchName' : $('repo-select-remote-matching').value,
-                'pcBranchName' : $('repo-select-phenomecentral.org').value,
-                'ptBranchName' : $('repo-select-phenotips').value,
                 'buildName'    : $('deploy-name').value,
-                'project'      : $$('input[name="project"]:checked')[0].value
+                'project'      : project,
+                'deployType'   : activeProjects[project].base
         };
+        for (var r in reposMeta) {
+          deployParameters[reposMeta[r].key + 'BranchName'] = $('repo-select-' + r).value;
+        }
 
         new Ajax.Request(SERVICE_URL, {
             parameters: deployParameters,
@@ -914,7 +983,7 @@ XWiki.widgets.InfoBox = Class.create(XWiki.widgets.ModalPopup, {
 .repo-label {
   font-weight: 700;
   margin-right: 1.5em;
-  width: 10em;
+  width: 15em;
   display: inline-block;
 }
 .deploy-name-label {
@@ -967,9 +1036,6 @@ td.issues .issue {
 .projects label {
   margin-right: 0.5em;
 }
-.projects label:nth-child(2) a:link, #deploy-content .repo-select:nth-child(1) a:link {
-  color: #428bca;
-}
 .buttonwrapper a:link {
   text-decoration: none;
 }
@@ -1019,6 +1085,27 @@ td.issues .issue {
 }
 #stats-container {
   min-height: 15em;
+}
+.server-name a[href] {
+  display: inline-block;
+  padding: .2em .4em;
+  border-radius: 4px;
+  background-color: black;
+  color: white !important;
+}
+a.button.delete-server {
+  background: #cc0000 !important;
+  border-color: #c00;
+  text-shadow: none;
+}
+#xwikilicence {
+  display: none;
+}
+#xwikiplatformversion {
+  display: none;
+}
+#xwikicontent {
+  padding-bottom: 0;
 }</code>
     </property>
     <property>

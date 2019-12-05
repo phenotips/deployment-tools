@@ -1,0 +1,43 @@
+{
+  "properties":
+  {
+    "server_port": 8080,
+    "ui_color": "#0CB0C4",
+    "ui_name": "LFS Data Core",
+    "ui_link": "https://lfs.phenotips.org",
+    "additional-links": [ {"name": "sling console log", "url": ":8080/libs/composum/nodes/console/content/felix.html", "newline": true },
+                          {"name": "dev browser", "url": ":8080/bin/browser.html"},
+                          {"name": "error log", "url": ":8090/sling/logs/error.log", "newline": true},
+                          {"name": "build log", "url": ":8090/github/lfs/build-lfs.log" } ]
+  },
+
+  "build":
+  [
+    {
+      "repo_shortcut": "LFS",
+      "repo": "https://github.com/ccmbioinfo/lfs",
+      "branch": "dev",
+      "command": "mvn clean install -Pquick"
+    }
+  ],
+
+  "deploy":
+  [
+    {
+      "comment": "copy from distribution folder",
+      "action": "copy",
+      "source_dir": "lfs/distribution/target",
+      "source_files": ["*.*"]
+    }
+  ],
+
+  "run":
+  [
+    {
+      "command": "java -jar *.jar -Dsling.run.modes=dev",
+      "stdout_redirect_file": "serverlog.txt",
+      "run_and_proceed": true
+      ### run_and_proceed when true the next step is executed without waiting for the process to finish (waiting is the default)
+    }
+  ]
+}

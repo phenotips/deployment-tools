@@ -1,0 +1,1691 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+ * See the NOTICE file distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see http://www.gnu.org/licenses/
+-->
+
+<xwikidoc version="1.1">
+  <web>PhenomeCentral</web>
+  <name>TestDeployment</name>
+  <language/>
+  <defaultLanguage/>
+  <translation>0</translation>
+  <creator>xwiki:XWiki.Admin</creator>
+  <creationDate>1539117105000</creationDate>
+  <parent>data.WebHome</parent>
+  <author>xwiki:XWiki.Admin</author>
+  <contentAuthor>xwiki:XWiki.Admin</contentAuthor>
+  <date>1575499358000</date>
+  <contentUpdateDate>1575496817000</contentUpdateDate>
+  <version>1.1</version>
+  <title>Test Deployment</title>
+  <comment/>
+  <minorEdit>false</minorEdit>
+  <syntaxId>xwiki/2.1</syntaxId>
+  <hidden>false</hidden>
+  <content>{{velocity}}
+##
+$xwiki.jsx.use('PhenomeCentral.TestDeployment')##
+$xwiki.ssx.use('PhenoTips.TabelarDataMacros')##
+##
+#set ($serverList = $services.testDeployment.listServers())
+##
+#set ($message = '')
+#set ($usage = $serverList.get('usage'))
+#set ($cpuLeft = $usage.get('maxTotalCores') - $usage.get('totalCoresUsed'))
+#if ($cpuLeft &lt; $usage.get('requiredCores'))
+  #set ($message = "less than $usage.get('requiredCores') virtual CPUs are free")
+#end
+#set ($ramLeft = $usage.get('maxTotalRAMSize') - $usage.get('totalRAMUsed'))
+#if ($ramLeft &lt; $usage.get('requiredRAM'))
+  #if ($message != '')#set ($message = $message + ", ")#end
+  #set ($message = $message + "less than $usage.get('requiredRAM')GB of free RAM")
+#end
+#set ($instLeft = $usage.get('maxTotalInstances') - $usage.get('totalInstancesUsed'))
+#if ($instLeft == 0)
+  #if ($message != '')#set ($message = $message + ", ")#end
+  #set ($message = $message + "reached the maximum allowed number of running instances")
+#end
+#set ($canRunInst = $mathtool.min($instLeft, $mathtool.idiv($ramLeft,8), $mathtool.idiv($cpuLeft,2)))
+#set ($discard = $usage.put("spaceForInst", $canRunInst))##
+{{html clean=false wiki=false}}
+&lt;div class="branch-select no-user-select #if ($message != '')disabled-branch-select#end"&gt;
+  Please select project and corresponding branches for test build deployment.
+  &lt;div class="projects"&gt;&lt;/div&gt;
+  ##
+  &lt;div id="deploy-content"&gt;&lt;/div&gt;
+&lt;/div&gt;
+##
+&lt;div id="stats-content"&gt;
+#if ($message != '')
+  &lt;div class="box warningmessage"&gt;There is not enough &lt;a href="https://os.hpc4health.ca" target="_blank"&gt;OpenStack&lt;/a&gt; resources for starting a new instance: &lt;span id="limit-message"&gt;$message&lt;/span&gt;.
+&lt;br&gt;&lt;br&gt;To alocate more space please delete some unused running servers.&lt;/div&gt;
+#else
+  &lt;div class="box infomessage"&gt;&lt;a href="https://os.hpc4health.ca" target="_blank"&gt;OpenStack&lt;/a&gt; has resources for &lt;span id="inst-avail"&gt;$canRunInst&lt;/span&gt; more instances.&lt;/div&gt;
+#end
+&lt;input type='hidden' id='usage' value='$usage.toString()'/&gt;
+&lt;div class="chart"&gt;
+  &lt;canvas id="cpu" width="70" height="70"&gt;&lt;/canvas&gt;
+  &lt;div&gt;VCPUs&lt;/div&gt;
+  &lt;div&gt;Used &lt;span class="amount-used"&gt;$usage.get('totalCoresUsed')&lt;/span&gt; of $usage.get('maxTotalCores')&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="chart"&gt;
+  &lt;canvas id="ram" width="70" height="70"&gt;&lt;/canvas&gt;
+  &lt;div&gt;RAM&lt;/div&gt;
+  &lt;div&gt;Used &lt;span class="amount-used"&gt;$usage.get('totalRAMUsed')&lt;/span&gt;GB of $usage.get('maxTotalRAMSize')GB&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="chart"&gt;
+  &lt;canvas id="inst" width="70" height="70"&gt;&lt;/canvas&gt;
+  &lt;div&gt;Instances&lt;/div&gt;
+  &lt;div&gt;Used &lt;span class="amount-used"&gt;$usage.get('totalInstancesUsed')&lt;/span&gt; of $usage.get('maxTotalInstances')&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="clear-floats"&gt;&lt;/div&gt;
+{{/html}}
+##
+##
+#set ($datasetList = $services.pcTestDeployment.listTestDatasets())
+{{html clean=false wiki=false}}&lt;input type="hidden" id="datasets-available" value="$escapetool.xml($jsontool.serialize($datasetList))"/&gt;{{/html}}
+##
+== Running test servers ==
+#set ($serverList = $serverList.get('servers'))
+## TABLE HEADER
+#set ($headerNames = ['Server Name', 'Branches', 'Issues', 'IP', 'Started Time', 'Actions &amp; Test Data', 'Status', 'Logs', 'Action'])
+(% class="extradata-list server-list-row" %)
+#foreach($headerName in $headerNames)
+  |=(% class="col-label" %)$headerName##
+#end
+
+## TABLE BODY
+#foreach ($obj in $serverList)
+  #set ($beginTime = $obj.get('created').replace('T',' ').replace('Z',''))
+  #set ($meta = $obj.get('metadata'))
+  #set ($projName = $escapetool.xml($obj.get('name')))
+  #set ($projIP = $escapetool.xml($obj.get('ip')))
+  (% class="extradata-list server-list-row #if($obj.get('status') == "active")active-server#end" %)##
+  |(% class="server-name" %){{html clean="false"}}&lt;input type="hidden" id="$projName" data-server-name="$projName" data-server-ip="$projIP" class="server-info" value="$escapetool.xml($jsontool.serialize($meta))"/&gt;{{/html}}##
+  |(% class="branches" %){{html clean="false"}}&lt;div class="branches-cell"&gt;&lt;/div&gt;{{/html}}##
+  |(% class="issues" %)((()))##
+  |(% class="ip" %){{html clean="false"}}&lt;a href="http://$projIP:8080" target="_blank"&gt;$projIP&lt;/a&gt;{{/html}}##
+  |(% class="begin-time" %)$!{beginTime}##
+  |(% class="load-test-data" %)#if($obj.get('status') == "active"){{html clean="false"}}##
+  &lt;div class="test-data-selector hidden"&gt;##
+  &lt;select class="test-dataset-select"&gt;##
+    #foreach ($obj in $datasetList)&lt;option value="$obj"&gt;$obj&lt;/option&gt;#end##
+  &lt;/select&gt;##
+  &lt;span class="buttonwrapper"&gt;&lt;a class="button load-data" href="$projIP"&gt;&lt;span class="fa fa-cloud-upload"&gt; &lt;/span&gt;&lt;span&gt;Load&lt;/span&gt;&lt;/a&gt;&lt;/span&gt;##
+  &lt;/div&gt;{{/html}}#end##
+  |(% class="run-status $completedCSS" %)$obj.get('status')##
+  |(% class="logs" %)#if($obj.get('status') == "active"){{html clean="false"}}&lt;div class="logs-column"&gt;&lt;/div&gt;{{/html}}#end##
+  |(% class="action-delete" %){{html clean="false"}}&lt;span class="buttonwrapper"&gt;&lt;a class="button delete-server" href="" data-server-name="$obj.get('name')"&gt;&lt;span class="fa fa-trash"&gt; &lt;/span&gt;&lt;span&gt;Delete&lt;/span&gt;&lt;/a&gt;&lt;/span&gt;{{/html}}
+#end
+
+Last deployment {{html clean="false"}}&lt;a target="_blank" href="../resources/latest_deploy_v2.log"&gt;log&lt;/a&gt;{{/html}}
+Last data upload {{html clean="false"}}&lt;a target="_blank" href="../resources/latest_data_upload.log"&gt;log&lt;/a&gt;{{/html}}
+Frontend (this) server {{html clean="false"}}&lt;a target="_blank" href="../resources/serverlog.txt"&gt;log&lt;/a&gt;{{/html}}
+{{/velocity}}</content>
+  <object>
+    <name>PhenomeCentral.TestDeployment</name>
+    <number>0</number>
+    <className>XWiki.JavaScriptExtension</className>
+    <guid>4521dd24-2e6d-4402-9dd4-65e70e217d81</guid>
+    <class>
+      <name>XWiki.JavaScriptExtension</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <cache>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>cache</name>
+        <number>5</number>
+        <prettyName>Caching policy</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>long|short|default|forbid</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </cache>
+      <code>
+        <disabled>0</disabled>
+        <name>code</name>
+        <number>2</number>
+        <prettyName>Code</prettyName>
+        <rows>20</rows>
+        <size>50</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </code>
+      <name>
+        <disabled>0</disabled>
+        <name>name</name>
+        <number>1</number>
+        <prettyName>Name</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </name>
+      <parse>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>yesno</displayType>
+        <name>parse</name>
+        <number>4</number>
+        <prettyName>Parse content</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </parse>
+      <use>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>use</name>
+        <number>3</number>
+        <prettyName>Use this extension</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>currentPage|onDemand|always</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </use>
+    </class>
+    <property>
+      <cache>long</cache>
+    </property>
+    <property>
+      <code>var BASE_API_URL = 'https://api.github.com/repos/';
+var BASE_GITREPO_URL = 'https://github.com/';
+var SERVICE_URL = new XWiki.Document('TestDeploymentService', 'PhenomeCentral').getURL('get');
+var DEPLOY_LOG_URL = ":8090/deploy.log";
+
+var activeProjects = JSON.parse($('active-projects-metadata') &amp;&amp; $('active-projects-metadata').value || '{}');
+
+var usage = JSON.parse($('usage').value);
+var deploymentData = [];
+
+var usagePerInstance = {
+    totalCoresUsed: usage.requiredCores,
+    totalRAMUsed: usage.requiredRAM,
+    totalInstancesUsed: 1,
+    spaceForInst: -1
+}
+
+var branchRequestError = '';
+
+
+var updateAll = function() {
+    // TODO: refresh all data using JS
+    $('xwikicontent').innerHTML = "Reloading...";
+    location.reload();
+}
+
+var uploadingNotification = new XWiki.widgets.Notification('uploading dataset...', 'inprogress', {"inactive": true});
+var deletingNotification = new XWiki.widgets.Notification('deleting a VM...', 'inprogress', {"inactive": true});
+var creatingNotification = new XWiki.widgets.Notification('creating a VM...', 'inprogress', {"inactive": true});
+
+var createCORSRequest = function(method, url) {
+    var xhr = new XMLHttpRequest();
+    if ("withCredentials" in xhr) {
+       // XHR for Chrome/Firefox/Opera/Safari.
+      xhr.open(method, url, true);
+    } else if (typeof XDomainRequest != "undefined") {
+      // XDomainRequest for IE.
+      xhr = new XDomainRequest();
+      xhr.open(method, url);
+    } else {
+      // CORS not supported.
+      xhr = null;
+    }
+    return xhr;
+};
+
+
+var requestReposInfo = function () {
+  var requested = 0;
+
+  // HACK: don't hammer GitHub with branch requests if branch selection is disabled: just fake master-master-master
+  if ($$(".branch-select")[0].hasClassName("disabled-branch-select")) {
+      deploymentData.each(function(project, index) {
+          project.build.each(function (repo) {
+              if (repo.non_user_selectable_branch) { return; }
+              repo.branches = ['master'];
+          });
+      });
+      drawProjectSelectors();
+      return;
+  }
+
+  var repos_length = 0;
+
+  deploymentData.each(function(project, index) {
+      project.build.each(function (repo) {
+          if (repo.non_user_selectable_branch) { return; }
+          repos_length++;
+      });
+  });
+
+  deploymentData.each(function(project, index) {
+    project.build.each(function (repo) {
+        if (repo.non_user_selectable_branch) { return; }
+
+        var name = repo.repo.replace(BASE_GITREPO_URL, '');
+        var xhr = createCORSRequest('GET', BASE_API_URL + name + '/branches?per_page=100');
+        if (!xhr) { return; } // CORS not supported
+
+        // Response handlers
+        xhr.onload = function() {
+            var response = JSON.parse(xhr.responseText);
+            if (response &amp;&amp; Array.isArray(response)) {
+                repo.branches = [];
+                response.each(function(branch) {
+                    repo.branches.push(branch.name);
+                });
+            } else {
+                console.log("[!] Error parsing branch data JSON");
+                repo.branches = ['master'];
+            }
+            requested++;
+            if (requested == repos_length) {
+                drawProjectSelectors();
+            }
+        };
+
+        xhr.onerror = function() {
+            branchRequestError = 'net::ERR_CONNECTION_TIMED_OUT Error while fetching branches info from from GitHub API (probably GitHub API is down)';
+            console.log(branchRequestError);
+            repo.branches = ['master'];
+
+            requested++;
+            if (requested == repos_length) {
+                drawProjectSelectors();
+            }
+            return;
+        };
+
+        xhr.send();
+
+        if (xhr.status === 403) {
+            alert("Error getting branches form GitHub - probably too many requests were sent in a short time. Please wait and retry");
+        }
+    });
+  });
+}
+
+var showActionResultNotification = function(text, actionOnYes) {
+    behavior = {
+        onYes: function() {
+            actionOnYes &amp;&amp; actionOnYes();
+       }
+    };
+    var dialogParameters = {
+        confirmationText: text,
+    };
+    var actionPerformedDialog = new XWiki.widgets.InfoBox(behavior, dialogParameters);
+}
+
+var attachServerDeleteListeners = function () {
+    $$('.delete-server').invoke('observe', 'click', function(clickEvent) {
+        clickEvent.stop();
+        var item = clickEvent.findElement().up('.action-delete').down('a');
+        var serverName = item.dataset.serverName;
+        item.blur();
+        if (item.disabled) {
+          // Do nothing if the button was already clicked and it's waiting for a response from the server.
+          return;
+        } else {
+            new XWiki.widgets.ConfirmedAjaxRequest(SERVICE_URL, {
+                  parameters: {
+                    'action' : 'delete',
+                    'buildName' : serverName
+                  },
+                  method: "get",
+                  onCreate : function() {
+                      console.log('Sending delete request');
+                      deletingNotification.show();
+                  },
+                  onSuccess: function(response) {
+                      console.log('Delete request: Success');
+                      if (response.responseJSON &amp;&amp; response.responseJSON.result) {
+                          showActionResultNotification("VM deleted successfully", updateAll);
+                      } else {
+                          showActionResultNotification("Failed to delete the VM");
+                      }
+                  },
+                  onComplete : function() {
+                      console.log('Delete request: Complete');
+                      deletingNotification.hide();
+                  },
+                  onFailure : function() {
+                      console.log('Delete request: Failed');
+                  }
+                },
+                /* Interaction parameters */
+                {
+                    confirmationText: 'Are you sure that you want to delete instance &lt;span class="code"&gt;' + serverName + '&lt;/span&gt;?'
+                }
+            );
+        }
+    });
+}
+
+var attachLoadDataListeners = function () {
+    $$('.button.load-data').invoke('observe', 'click', function(clickEvent) {
+        clickEvent.stop();
+        var item = clickEvent.element();
+        var serverIP = item.up('tr').down('.ip a').innerHTML;
+        var dataName = item.up('td').down('select').value;
+        item.blur();
+        if (item.disabled) {
+            // Do nothing if the button was already clicked and it's waiting for a response from the server.
+            return;
+        } else {
+            new Ajax.Request(SERVICE_URL, {
+                parameters: {
+                    'action'   : 'load-data',
+                    'ip'       : serverIP,
+                    'dataName' : dataName
+                },
+                method: "get",
+                onCreate : function() {
+                    console.log('Load data: sending');
+                    uploadingNotification.show();
+                },
+                onSuccess: function(response) {
+                    console.log('Load data: got response');
+                    if (response.responseJSON &amp;&amp; response.responseJSON.result) {
+                        showActionResultNotification("Dataset uploaded successfully");
+                    } else {
+                        showActionResultNotification("Failed to upload dataset");
+                    }
+                },
+                onComplete : function() {
+                    console.log('Load data: Complete');
+                    uploadingNotification.hide();
+                },
+                onFailure : function() {
+                    console.log('Load data: Failed');
+                }
+            });
+        }
+    });
+}
+
+
+var selectProject = function(name) {
+    $$('.branch-select .repo-select input[type="text"]:not(#deploy-name), .branch-select .repo-select select').each(function (item) {
+      var isRepoForThisProject = item.up('.repo-select').hasClassName(name);
+      item.disabled = !!!isRepoForThisProject;
+      item.up().style.opacity = isRepoForThisProject ? 1 : 0.3;
+    });
+}
+
+var attachBranchSelectionListeners = function () {
+    $$('.repo-select select').invoke('observe', 'change', function(event) {
+        var item = event.element();
+        var branch_name = item.value;
+        var repo_name = item.id.replace('repo-select-', '');
+        deploymentData.each(function(project) {
+            project.build.each(function (repo) {
+                if (repo.non_user_selectable_branch) { return; }
+                var name = repo.repo.replace(BASE_GITREPO_URL, '');
+                if (name == repo_name) {
+                    repo.branch = branch_name;
+                }
+            });
+       });
+    });
+}
+
+var attachProjectSelectionListeners = function () {
+    $$('input[name="project"]').invoke('observe', 'click', function(event) {
+        var item = event.element();
+        selectProject(item.value);
+    });
+}
+
+var attachButtonHandlers  = function () {
+    attachServerDeleteListeners();
+    attachLoadDataListeners();
+    attachProjectSelectionListeners();
+    attachBranchSelectionListeners();
+}
+
+var generateDeployButton = function () {
+
+    // var button = new Element('input', {'class' : 'button', 'type' : 'button', 'id':'deploy', 'value':'Deploy'});
+    var button = new Element('span', {'class' : 'buttonwrapper'});
+    var buttonA = new Element('a', {'class' : 'button deploy-button', 'id':'deploy', 'href' : '#'})
+                                   .insert(new Element('span', {'class' : 'fa fa-upload'}).update(" "))
+                                   .insert(new Element('span').update("Deploy"));
+    button.insert(buttonA);
+
+    var deploying = false;
+    var onDeploy = function (deploy_instructions, vm_name) {
+        if (deploying) {
+            return;
+        }
+
+        var deployParameters = {
+                'action'              : 'deploy',
+                'buildName'           : vm_name,
+                'deploy_instructions' : JSON.stringify(deploy_instructions)
+        };
+
+        new Ajax.Request(SERVICE_URL, {
+            parameters: deployParameters,
+            method: "get",
+            onCreate : function() {
+                deploying = true;
+                console.log('Sending deploy request: ' + JSON.stringify(deployParameters));
+
+                $$(".branch-select")[0].addClassName("disabled-branch-select");
+                creatingNotification.show();
+
+                // mark resources as used
+                for (var prop in usagePerInstance) {
+                    if (usagePerInstance.hasOwnProperty(prop)) {
+                        usage[prop] += usagePerInstance[prop];
+                    }
+                }
+                drawPiCharts();
+            },
+            onSuccess: function(response) {
+                console.log('Deploy request: got response');
+                if (response.responseJSON &amp;&amp; response.responseJSON.result) {
+                    showActionResultNotification("A new test VM has been deployed. The page will be refreshed now to reflect the changes.", updateAll);
+                } else {
+                    // mark resouces as returned
+                    for (var prop in usagePerInstance) {
+                        if (usagePerInstance.hasOwnProperty(prop)) {
+                            usage[prop] -= usagePerInstance[prop];
+                        }
+                    }
+                    drawPiCharts();
+                    showActionResultNotification("Deployment failed");
+                }
+            },
+            onComplete : function() {
+                console.log('Deploy request: complete');
+                $$(".branch-select")[0].removeClassName("disabled-branch-select");
+                creatingNotification.hide();
+                deploying = false;
+            }
+        });
+    };
+
+    // validates build name, confirms selection and performs the deployment
+    var onDeployButtonPress = function() {
+
+        var project = $$('input[name="project"]:checked')[0].value;
+        var deploy_instructions;
+        deploymentData.each(function(item) {
+            if (project == item.properties.ui_name) {
+                deploy_instructions = item;
+            }
+        });
+
+        var vm_name = $('deploy-name').value;
+        if (!vm_name) {
+            vm_name = '';
+            deploy_instructions.build.each(function(repo) {
+                if (repo.non_user_selectable_branch) { return; }
+                if (vm_name != '') {
+                    vm_name += '_';
+                }
+                vm_name += repo.branch;
+            });
+            // replace "master_master_..._master" with simply "master"
+            if (vm_name.search(/^master(_master)*$/) == 0) {
+                vm_name = "master";
+            }
+            $('deploy-name').value = vm_name;
+        }
+
+        behavior = {
+            onYes: function() { onDeploy(deploy_instructions, vm_name); }
+        };
+        var dialogParameters = {
+            confirmationText: "A request to start a new VM will be sent - see deployment log for progress details",
+            yesButtonText: "OK",
+            noButtonText: "Cancel"
+        };
+        var actionPerformedDialog = new XWiki.widgets.ConfirmationBox(behavior, dialogParameters);
+    }
+
+    button.observe('click', onDeployButtonPress);
+
+    selectProject("PhenomeCentral");
+
+    return button;
+}
+
+var drawPiCharts = function () {
+    var cpuMax = usage.maxTotalCores;
+    var cpuUsed = usage.totalCoresUsed;
+    var ramMax = usage.maxTotalRAMSize;
+    var ramUsed = usage.totalRAMUsed;
+    var instMax = usage.maxTotalInstances;
+    var instUsed = usage.totalInstancesUsed;
+    var stats = {'cpu'  : [cpuMax - cpuUsed, cpuUsed],
+                 'ram'  : [ramMax - ramUsed, ramUsed],
+                 'inst' : [instMax - instUsed, instUsed]};
+    var colors = ["#ddd", "#8aaece"];
+    var totals = {'cpu'  : cpuMax, 'ram' : ramMax, 'inst' : instMax};
+
+    $("inst-avail") &amp;&amp; $("inst-avail").update(usage.spaceForInst);
+
+    $$('canvas').each( function(canvas) {
+        var data = stats[canvas.id];
+
+        canvas.up().down(".amount-used") &amp;&amp; canvas.up().down(".amount-used").update(data[1]);
+
+        var ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        var center = [canvas.width / 2, canvas.height / 2];
+        var radius = Math.min(canvas.width, canvas.height) / 2;
+        var lastPosition = 60, total = totals[canvas.id];
+
+        for (var i = 0; i &lt; data.length; i++) {
+            ctx.fillStyle = colors[i];
+            ctx.beginPath();
+            ctx.moveTo(center[0],center[1]);
+            ctx.arc(center[0],center[1],radius,lastPosition,lastPosition + (Math.PI*2*(data[i]/total)),false);
+            ctx.lineTo(center[0],center[1]);
+            ctx.fill();
+            lastPosition += Math.PI*2*(data[i]/total);
+        }
+    });
+}
+
+var check_build_instructions = function(build_instructions, data) {
+    if (!build_instructions.hasOwnProperty("properties")) {
+        build_instructions.properties = {};
+    }
+    if (!build_instructions.properties.hasOwnProperty("ui_color")) {
+        build_instructions.properties.ui_color = "#000";
+    }
+    if (!build_instructions.properties.hasOwnProperty("additional-links")) {
+        build_instructions.properties["additional-links"] = [];
+    }
+    if (!build_instructions.hasOwnProperty("build")) {
+        build_instructions.build = [];
+
+        // parse old VM metadata
+        if (data.hasOwnProperty("pt")) {
+            build_instructions.properties.ui_color = "#628BCA";
+            build_instructions.build.push({"repo_shortcut": "PT", "repo": "https://github.com/phenotips/phenotips", "branch": data.pt });
+        }
+        if (data.hasOwnProperty("pn")) {
+            build_instructions.properties.ui_color = "#CA974D";
+            build_instructions.build.push({"repo_shortcut": "PN", "repo": "https://github.com/phenotips/patient-network", "branch": data.pn });
+        }
+        if (data.hasOwnProperty("pt") || data.hasOwnProperty("pc")) {
+            build_instructions.properties["additional-links"].push({"name": "instance log", "url": ":8080/resources/serverlog.txt", "newline": true });
+        }
+    }
+    return build_instructions;
+}
+
+
+var drawRunningServersTable = function () {
+
+    $$('td.server-name input[type="hidden"]').each(function(input) {
+        if (input &amp;&amp; input.value &amp;&amp; input.value.length &gt; 1) {
+            try {
+                // parse VM metadata, if available, and use it to add various UI items and links to the row listing this VM
+                var data = JSON.parse(input.value);
+                var build_name = input.dataset.serverName;
+
+                try {
+                    var build_instructions = JSON.parse(data.build_instructions);
+                } catch (err) {
+                    // set some generic parameters to render most basic things
+                    var build_instructions = {};
+                    console.log("VM named [" + build_name + "] has no build instructions");
+                }
+
+                //----- basic error-checking of instructions JSON to not crash the UI
+                build_instructions = check_build_instructions(build_instructions, data);
+
+                //----- Adding Server Name table cell
+                var ip = input.up('tr').down('td.ip a').href;
+                var buttonA = new Element('a', {'href':ip, 'target':'_blank', 'style':'background-color:' + build_instructions.properties.ui_color})
+                                   .insert(build_name);
+                input.up('td').insert(buttonA);
+
+                //----- Adding Branches table cell
+                var branchesTd = input.up('tr').down('td.branches');
+                build_instructions.build.each(function(branch) {
+                    if (!branch.non_user_selectable_branch) {
+                        var href = branch.repo + '/tree/' + branch.branch;
+                        var branchInfoEl = new Element('a', {'href':href, 'target':'_blank'}).insert(branch.branch);
+                        branchesTd.insert(branch.repo_shortcut + ": ").insert(new Element('span', {'class': 'code'}).insert(branchInfoEl)).insert('  ');
+                    }
+                });
+
+                //----- Adding Issues table cell
+                var issuesTd = input.up('tr').down('td.issues');
+                build_instructions.build.each(function(branch) {
+                    if (branch.non_user_selectable_branch) { return; }
+                    var matches = branch.branch.match(/[A-Z]+-[0-9]+/);
+                    if (matches) {
+                        var issueId = matches[0];
+                        var issueURL = "https://phenotips.atlassian.net/browse/"+ issueId;
+                        var issuesTd = input.up('tr').down('td.issues');
+                        var issueEl = new Element('a', {'href':issueURL, 'class':'issue', 'target':'_blank', 'rel':'__blank noopener noreferrer' }).insert(issueId);
+                        issuesTd.insert(issueEl);
+                    }
+                });
+
+                //----- Enabling test data load
+                if (build_instructions.properties.supported_ui_actions &amp;&amp; build_instructions.properties.supported_ui_actions.includes("load_pc_data")) {
+                    input.up('tr').down('td.load-test-data .test-data-selector').removeClassName('hidden');
+                }
+                //----- Adding logs links
+                var logsTd = input.up('tr').down('td.logs');
+                var ip = input.dataset.serverIp;
+                var needSeparator = false;
+                build_instructions.properties["additional-links"].push({"name": "deploy log", "url": DEPLOY_LOG_URL });
+                build_instructions.properties["additional-links"].each(function(item) {
+                    var el = new Element('a', {'href': 'http://' + ip + item.url, 'target':'_blank'}).insert(item.name);
+                    if (needSeparator) {
+                        logsTd.insert(' | ');
+                    }
+                    logsTd.insert(el);
+                    if (item.newline) {
+                        logsTd.insert(new Element('br'));
+                        needSeparator = false;
+                    } else {
+                        needSeparator = true;
+                    }
+                })
+            } catch(err) {
+                console &amp;&amp; console.error(err);
+            }
+        }
+    });
+}
+
+var parseDeploymentData = function () {
+    Deployment.each(function(project) {
+        cleaned_instructions = project.replace(/\s*###.*?\n/g, "\n")  // remove comments which are not supported in JSON
+        deploymentData.push(JSON.parse(cleaned_instructions));
+    })
+}
+
+var drawProjectSelectors = function () {
+    var projectSelectionContainer = $$('.branch-select .projects')[0];
+
+    var createProjectSelect = function(ui_name, repo, ui_color, index) {
+        var input = new Element('input', {'name':"project", 'type':"radio", 'value': ui_name});
+        input.checked = (index == 0);
+        var link = new Element('a', {'href':repo, 'class':'issue', 'target':'_blank', 'rel':'__blank noopener noreferrer','style':"color: " + ui_color + " !important;"}).insert(ui_name);
+        return new Element('label').insert(input).insert(link);
+    };
+
+    deploymentData.each(function(project, index) {
+        projectSelectionContainer.insert(createProjectSelect(project.properties.ui_name, project.properties.link, project.properties.ui_color, index));
+    });
+
+    var generateBranchSelector = function (branches, link, project_color, project_name, repo_shortcut) {
+        var name = link.replace(BASE_GITREPO_URL, '');
+        var repoLink = new Element('a', {'href': link, 'target': '_blank', style: 'color: ' + project_color}).update(name);
+        var selectDiv = new Element('div', {'class' : 'repo-select'}).insert(new Element('label', {'class' : 'repo-label'}).update(repoLink));
+        var select = new Element('select', {'id': 'repo-select-' + name});
+        branches.each(function(branch) {
+            var branchData = { 'value': branch };
+            if (branch == "master") {
+                branchData["selected"] = true;
+            }
+            select.insert(new Element('option', branchData).update(branch));
+        });
+        selectDiv.insert(select);
+
+        selectDiv.addClassName(project_name + ' ' + repo_shortcut);
+        return selectDiv;
+    }
+
+    var branchesDropdownContainer = $('deploy-content') || '';
+    deploymentData.each(function(project, index) {
+        project.build.each(function (repo) {
+            if (repo.non_user_selectable_branch) { return; }
+            branchesDropdownContainer.insert(generateBranchSelector(repo.branches, repo.repo, project.properties.ui_color, project.properties.ui_name, repo.repo_shortcut));
+            delete repo.branches;
+        });
+    });
+
+    var deployNameInput = new Element('input', {'class' : 'deploy-input', 'type' : 'text', 'id' : 'deploy-name'});
+    var deployNameDiv = new Element('div', {'class' : 'deploy-name'});
+    deployNameDiv.insert(new Element('label', {'class' : 'deploy-name-label'}).update('Deploy build name:'));
+    deployNameDiv.insert(deployNameInput);
+    branchesDropdownContainer.insert(deployNameDiv);
+
+    branchesDropdownContainer.insert(generateDeployButton());
+
+    attachButtonHandlers();
+}
+
+document.observe('xwiki:dom:loaded', function() {
+    parseDeploymentData();
+    requestReposInfo();
+    drawPiCharts();
+    drawRunningServersTable();
+});</code>
+    </property>
+    <property>
+      <name/>
+    </property>
+    <property>
+      <parse/>
+    </property>
+    <property>
+      <use>currentPage</use>
+    </property>
+  </object>
+  <object>
+    <name>PhenomeCentral.TestDeployment</name>
+    <number>1</number>
+    <className>XWiki.JavaScriptExtension</className>
+    <guid>4521dd24-2e6d-4402-9dd4-65e70e217d83</guid>
+    <class>
+      <name>XWiki.JavaScriptExtension</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <cache>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>cache</name>
+        <number>5</number>
+        <prettyName>Caching policy</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>long|short|default|forbid</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </cache>
+      <code>
+        <disabled>0</disabled>
+        <name>code</name>
+        <number>2</number>
+        <prettyName>Code</prettyName>
+        <rows>20</rows>
+        <size>50</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </code>
+      <name>
+        <disabled>0</disabled>
+        <name>name</name>
+        <number>1</number>
+        <prettyName>Name</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </name>
+      <parse>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>yesno</displayType>
+        <name>parse</name>
+        <number>4</number>
+        <prettyName>Parse content</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </parse>
+      <use>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>use</name>
+        <number>3</number>
+        <prettyName>Use this extension</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>currentPage|onDemand|always</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </use>
+    </class>
+    <property>
+      <cache>long</cache>
+    </property>
+    <property>
+      <code>// Make sure the XWiki 'namespace' and the ModalPopup class exist.
+if(typeof(XWiki) == "undefined" || typeof(XWiki.widgets) == "undefined" || typeof(XWiki.widgets.ModalPopup) == "undefined") {
+  if (typeof console != "undefined" &amp;&amp; typeof console.warn == "function") {
+    console.warn("[MessageBox widget] Required class missing: XWiki.widgets.ModalPopup");
+  }
+} else {
+
+XWiki.widgets.InfoBox = Class.create(XWiki.widgets.ModalPopup, {
+  /** Default displayed texts */
+  defaultInteractionParameters : {
+    confirmationText: "-",
+    yesButtonText: "OK",
+  },
+  /** Constructor. Registers the key listener that pops up the dialog. */
+  initialize : function($super, behavior, interactionParameters) {
+    this.interactionParameters = Object.extend(Object.clone(this.defaultInteractionParameters), interactionParameters || {});
+    $super(
+      this.createContent(this.interactionParameters),
+      {
+        "show"  : { method : this.showDialog,  keys : [] },
+        "yes"   : { method : this.onYes,       keys : ['Enter', 'Space', 'Esc'] },
+        "close" : { method : this.closeDialog, keys : [] }
+      },
+      {
+         displayCloseButton : false,
+         removeOnClose : true
+      }
+    );
+    this.showDialog();
+    this.setClass("confirmation");
+    this.behavior = behavior || { };
+  },
+  /** Create the content of the confirmation dialog: icon + question text, buttons */
+  createContent : function (data) {
+    var question = new Element("div", {"class" : "question"}).update(data.confirmationText);
+    var buttons = new Element("div", {"class" : "buttons"});
+    var yesButton = this.createButton("button", data.yesButtonText, "(Enter)", "");
+    buttons.insert(yesButton);
+    var content =  new Element("div");
+    content.insert(question).insert(buttons);
+    Event.observe(yesButton, "click", this.onYes.bindAsEventListener(this));
+    return content;
+  },
+  onYes : function() {
+    this.closeDialog();
+    if (typeof (this.behavior.onYes) == 'function') {
+      this.behavior.onYes();
+    }
+  }
+});
+} // if the parent widget is defined
+</code>
+    </property>
+    <property>
+      <name/>
+    </property>
+    <property>
+      <parse/>
+    </property>
+    <property>
+      <use>currentPage</use>
+    </property>
+  </object>
+  <object>
+    <name>PhenomeCentral.TestDeployment</name>
+    <number>2</number>
+    <className>XWiki.JavaScriptExtension</className>
+    <guid>be43638f-4d63-4161-a181-99faed1628d8</guid>
+    <class>
+      <name>XWiki.JavaScriptExtension</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <cache>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>cache</name>
+        <number>5</number>
+        <prettyName>Caching policy</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>long|short|default|forbid</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </cache>
+      <code>
+        <disabled>0</disabled>
+        <name>code</name>
+        <number>2</number>
+        <prettyName>Code</prettyName>
+        <rows>20</rows>
+        <size>50</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </code>
+      <name>
+        <disabled>0</disabled>
+        <name>name</name>
+        <number>1</number>
+        <prettyName>Name</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </name>
+      <parse>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>yesno</displayType>
+        <name>parse</name>
+        <number>4</number>
+        <prettyName>Parse content</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </parse>
+      <use>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>use</name>
+        <number>3</number>
+        <prettyName>Use this extension</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>currentPage|onDemand|always</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </use>
+    </class>
+    <property>
+      <cache>short</cache>
+    </property>
+    <property>
+      <code>if(typeof(Deployment) == "undefined") {
+  Deployment = []
+}
+
+Deployment.push(
+ `{
+  "properties":
+  {
+    "server_port": 8080,
+    "ui_color": "#EA972D",
+    "ui_name": "PhenomeCentral",
+    "ui_link": "https://phenomecentral.org",
+    "supported_ui_actions": [ "load_pc_data" ],
+    "additional-links": [ {"name": "instance log", "url": ":8080/resources/serverlog.txt", "newline": true },
+                          { "name": "emails", "url": ":8090/FakeSMTP/received-emails/" } ]
+  },
+
+  "build":
+  [
+    {
+      "comment": "first build patient network",
+      "repo_shortcut": "PN",
+      "repo": "https://github.com/phenotips/patient-network",
+      "branch": "master",
+      "command": "mvn clean install -Pquick"
+    },
+    {
+      "comment": "then build remote matching",
+      "repo_shortcut": "RM",
+      "repo": "https://github.com/phenotips/remote-matching",
+      "branch": "master",
+      "command": "mvn clean install -Pquick"
+    },
+    {
+      "comment": "finally build PC",
+      "repo_shortcut": "PC",
+      "repo": "https://github.com/phenotips/phenomecentral.org",
+      "branch": "master",
+      "command": "mvn clean install -Pquick"
+    },
+    {
+      "comment": "build (optional) reindex extension for PT (used to reindex patients after dataset upload)",
+      "repo": "https://github.com/phenotips/deployment-tools",
+      "branch": "master",
+      "non_user_selectable_branch": true,   ### we don't want a branch selector for this repository in the UI
+      "sub_dir": "pc-test-deploy-rest",
+      "command": "mvn clean install -Pquick",
+      "continue_on_fail": true
+    }
+  ],
+
+  "deploy":
+  [
+    {
+      "comment": "deploy standalone version from a ZIP",
+      "action": "unzip",
+      "source_dir": "phenomecentral.org/standalone/target",
+      "source_files": ["phenomecentral-standalone*.zip"]
+      ### source_dir is relative to git root (by default "./github")
+    },
+    {
+      "comment": "install reindexing REST",
+      "action": "copy",
+      "source_dir": "deployment-tools/pc-test-deploy-rest/target",
+      "source_files": ["pc-test-deploy*.jar"],
+      "target_dir_re": "^phenomecentral*",
+      "target_sub_dir": "webapps/phenotips/WEB-INF/lib"
+      ### target_dir_re is relative to deploy root (by default "./deploy/build_name")
+      ### target_sub_dir is relative to target_dir_re
+    }
+  ],
+
+  "run":
+  [
+    {
+      "comment": "start PT, redirect stdout to a web-accessible location to view logs via web",
+      "directory_re": "^phenomecentral",
+      "command": "./start.sh",
+      "stdout_redirect_file": "webapps/phenotips/resources/serverlog.txt",
+      ### using "webapps/phenotips/resources/" because it is web-accessible through phenotips
+      "run_and_proceed": true
+      ### run_and_proceed when true the next step is executed without waiting for the process to finish (which is the default)
+    },
+    {
+      "comment": "wait for server to start before issuing the trigger command in the next step",
+      "command": "sleep 50s"
+    },
+    {
+      "comment": "trigger PT initialization",
+      "command": "curl http://localhost:8080"
+    }
+  ]
+}`)</code>
+    </property>
+    <property>
+      <name>PC deployment</name>
+    </property>
+    <property>
+      <parse>0</parse>
+    </property>
+    <property>
+      <use>currentPage</use>
+    </property>
+  </object>
+  <object>
+    <name>PhenomeCentral.TestDeployment</name>
+    <number>3</number>
+    <className>XWiki.JavaScriptExtension</className>
+    <guid>73118197-2d6e-4e67-9c52-ba54f57dc3ed</guid>
+    <class>
+      <name>XWiki.JavaScriptExtension</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <cache>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>cache</name>
+        <number>5</number>
+        <prettyName>Caching policy</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>long|short|default|forbid</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </cache>
+      <code>
+        <disabled>0</disabled>
+        <name>code</name>
+        <number>2</number>
+        <prettyName>Code</prettyName>
+        <rows>20</rows>
+        <size>50</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </code>
+      <name>
+        <disabled>0</disabled>
+        <name>name</name>
+        <number>1</number>
+        <prettyName>Name</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </name>
+      <parse>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>yesno</displayType>
+        <name>parse</name>
+        <number>4</number>
+        <prettyName>Parse content</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </parse>
+      <use>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>use</name>
+        <number>3</number>
+        <prettyName>Use this extension</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>currentPage|onDemand|always</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </use>
+    </class>
+    <property>
+      <cache>short</cache>
+    </property>
+    <property>
+      <code>if(typeof(Deployment) == "undefined") {
+  Deployment = []
+}
+
+Deployment.push(
+ `{
+  "properties":
+  {
+    "server_port": 8080,
+    "ui_color": "#428BCA",
+    "ui_name": "PhenoTips",
+    "ui_link": "https://phenotips.org",
+    "supported_ui_actions": [ "load_pc_data" ],
+    "additional-links": [ {"name": "instance log", "url": ":8080/resources/serverlog.txt", "newline": true },
+                          { "name": "emails", "url": ":8090/FakeSMTP/received-emails/" } ]
+  },
+
+  "build":
+  [
+    {
+      "repo_shortcut": "PT",
+      "repo": "https://github.com/phenotips/phenotips",
+      "branch": "master",
+      "command": "mvn clean install -Pquick"
+    },
+    {
+      "comment": "build (optional) reindex extension for PT (used to reindex patients after dataset upload)",
+      "repo": "https://github.com/phenotips/deployment-tools",
+      "branch": "master",
+      "non_user_selectable_branch": true,   ### we don't want a branch selector for this repository in the UI
+      "sub_dir": "pc-test-deploy-rest",
+      "command": "mvn clean install -Pquick",
+      "continue_on_fail": true
+    }
+  ],
+
+  "deploy":
+  [
+    {
+      "comment": "deploy standalone version from a ZIP",
+      "action": "unzip",
+      "source_dir": "phenotips/distribution/standalone/target",
+      "source_files": ["phenotips-standalone*.zip"]
+      ### source_dir is relative to git root (by default "./github")
+    },
+    {
+      "comment": "install reindexing REST",
+      "action": "copy",
+      "source_dir": "deployment-tools/pc-test-deploy-rest/target",
+      "source_files": ["pc-test-deploy*.jar"],
+      "target_dir_re": "^phenotips*",
+      "target_sub_dir": "webapps/phenotips/WEB-INF/lib"
+      ### target_dir_re is relative to deploy root (by default "./deploy/build_name")
+      ### target_sub_dir is relative to target_dir_re
+    }
+  ],
+
+  "run":
+  [
+    {
+      "comment": "start PT, redirect stdout to a web-accessible location to view logs via web",
+      "directory_re": "^phenotips",
+      "command": "./start.sh",
+      "stdout_redirect_file": "webapps/phenotips/resources/serverlog.txt",
+      ### using "webapps/phenotips/resources/" because it is web-accessible through phenotips
+      "run_and_proceed": true
+      ### run_and_proceed when true the next step is executed withotu waiting for the process to finish (which is the default)
+    },
+    {
+      "comment": "wait for server to start before issuing the trigger command in the next step",
+      "command": "sleep 50s"
+    },
+    {
+      "comment": "trigger PT initialization",
+      "command": "curl http://localhost:8080"
+    }
+  ]
+}`)</code>
+    </property>
+    <property>
+      <name>PT deployment</name>
+    </property>
+    <property>
+      <parse>0</parse>
+    </property>
+    <property>
+      <use>currentPage</use>
+    </property>
+  </object>
+  <object>
+    <name>PhenomeCentral.TestDeployment</name>
+    <number>4</number>
+    <className>XWiki.JavaScriptExtension</className>
+    <guid>2788a786-b8dc-4ba4-8a63-36f9ec112c2b</guid>
+    <class>
+      <name>XWiki.JavaScriptExtension</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <cache>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>cache</name>
+        <number>5</number>
+        <prettyName>Caching policy</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>long|short|default|forbid</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </cache>
+      <code>
+        <disabled>0</disabled>
+        <name>code</name>
+        <number>2</number>
+        <prettyName>Code</prettyName>
+        <rows>20</rows>
+        <size>50</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </code>
+      <name>
+        <disabled>0</disabled>
+        <name>name</name>
+        <number>1</number>
+        <prettyName>Name</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </name>
+      <parse>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>yesno</displayType>
+        <name>parse</name>
+        <number>4</number>
+        <prettyName>Parse content</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </parse>
+      <use>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>use</name>
+        <number>3</number>
+        <prettyName>Use this extension</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>currentPage|onDemand|always</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </use>
+    </class>
+    <property>
+      <cache>short</cache>
+    </property>
+    <property>
+      <code>if(typeof(Deployment) == "undefined") {
+  Deployment = []
+}
+
+Deployment.push(
+ `{
+  "properties":
+  {
+    "server_port": 8080,
+    "ui_color": "#0CB0C4",
+    "ui_name": "LFS Data Core",
+    "ui_link": "https://lfs.phenotips.org",
+    "additional-links": [ {"name": "sling console log", "url": ":8080/libs/composum/nodes/console/content/felix.html", "newline": true },
+                          {"name": "dev browser", "url": ":8080/bin/browser.html"},
+                          {"name": "error log", "url": ":8090/deploy/dev/sling/logs/error.log", "newline": true},
+                          {"name": "build log", "url": ":8090/github/lfs/build-lfs.log" } ]
+  },
+
+  "build":
+  [
+    {
+      "repo_shortcut": "LFS",
+      "repo": "https://github.com/ccmbioinfo/lfs",
+      "branch": "dev",
+      "command": "mvn clean install -Pquick"
+    }
+  ],
+
+  "deploy":
+  [
+    {
+      "comment": "copy from distribution folder",
+      "action": "copy",
+      "source_dir": "lfs/distribution/target",
+      "source_files": ["*.*"]
+    }
+  ],
+
+  "run":
+  [
+    {
+      "command": "java -jar *.jar -Dsling.run.modes=dev",
+      "stdout_redirect_file": "serverlog.txt",
+      "run_and_proceed": true
+      ### run_and_proceed when true the next step is executed without waiting for the process to finish (waiting is the default)
+    }
+  ]
+}`)</code>
+    </property>
+    <property>
+      <name>LFS deployment</name>
+    </property>
+    <property>
+      <parse>0</parse>
+    </property>
+    <property>
+      <use>currentPage</use>
+    </property>
+  </object>
+  <object>
+    <name>PhenomeCentral.TestDeployment</name>
+    <number>0</number>
+    <className>XWiki.StyleSheetExtension</className>
+    <guid>1d65c06b-bf33-4760-8d45-ed180ee45932</guid>
+    <class>
+      <name>XWiki.StyleSheetExtension</name>
+      <customClass/>
+      <customMapping/>
+      <defaultViewSheet/>
+      <defaultEditSheet/>
+      <defaultWeb/>
+      <nameField/>
+      <validationScript/>
+      <cache>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>cache</name>
+        <number>6</number>
+        <prettyName>Caching policy</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>long|short|default|forbid</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </cache>
+      <code>
+        <disabled>0</disabled>
+        <name>code</name>
+        <number>3</number>
+        <prettyName>Code</prettyName>
+        <rows>20</rows>
+        <size>50</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.TextAreaClass</classType>
+      </code>
+      <contentType>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>contentType</name>
+        <number>1</number>
+        <prettyName>Content Type</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>CSS|LESS</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </contentType>
+      <name>
+        <disabled>0</disabled>
+        <name>name</name>
+        <number>2</number>
+        <prettyName>Name</prettyName>
+        <size>30</size>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.StringClass</classType>
+      </name>
+      <parse>
+        <disabled>0</disabled>
+        <displayFormType>select</displayFormType>
+        <displayType>yesno</displayType>
+        <name>parse</name>
+        <number>5</number>
+        <prettyName>Parse content</prettyName>
+        <unmodifiable>0</unmodifiable>
+        <classType>com.xpn.xwiki.objects.classes.BooleanClass</classType>
+      </parse>
+      <use>
+        <cache>0</cache>
+        <disabled>0</disabled>
+        <displayType>select</displayType>
+        <multiSelect>0</multiSelect>
+        <name>use</name>
+        <number>4</number>
+        <prettyName>Use this extension</prettyName>
+        <relationalStorage>0</relationalStorage>
+        <separator> </separator>
+        <separators>|, </separators>
+        <size>1</size>
+        <unmodifiable>0</unmodifiable>
+        <values>currentPage|onDemand|always</values>
+        <classType>com.xpn.xwiki.objects.classes.StaticListClass</classType>
+      </use>
+    </class>
+    <property>
+      <cache>long</cache>
+    </property>
+    <property>
+      <code>.repo-select {
+  line-height: 2.5em;
+}
+.repo-select select {
+  min-width: 17em;
+}
+.repo-select input{
+    width: 17em;
+}
+.repo-label {
+  font-weight: 700;
+  margin-right: 1.5em;
+  width: 15em;
+  display: inline-block;
+}
+.deploy-name-label {
+  width: 10em;
+  display: inline-block;
+  margin-right: .5em;
+}
+.deploy-input {
+  width: 17em!important;
+  margin-left: 1em;
+}
+.deploy-name {
+  line-height: 2.5em;
+}
+#deploy {
+  margin: 1em;
+}
+.viewbody .server-list-row td {
+  text-align: left;
+  line-height: 2em;
+}
+td.issues .issue {
+  white-space: nowrap;
+  display: inline-block;
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  border: 1px solid blue;
+  color: blue !important;
+  font-size: 85%;
+  margin-bottom: .2em;
+}
+.code {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  background-color: rgba(27,31,35,0.05);
+  border-radius: 3px;
+  font-family: "SFMono-Regular",Consolas,"Liberation Mono",Menlo,Courier,monospace;
+}
+.question .code {
+  line-height: 4em;
+}
+.test-dataset-select {
+  margin-right: 1em;
+}
+.projects {
+  font-weight: 700;
+  margin: 1em 5em 1em 11em;
+}
+.projects label {
+  margin-right: 0.5em;
+}
+.buttonwrapper a:link {
+  text-decoration: none;
+}
+.box.infomessage a:link, .box.infomessage a:visited {
+  color: #336699;
+}
+.chart {
+  display: inline-block;
+  text-align: center;
+  margin: 1em;
+  font-size: 12px;
+}
+.clear-floats {
+  clear: both;
+}
+.branch-select {
+  display: inline-block;
+  margin-right: 2em;
+}
+.disabled-branch-select {
+  opacity: 0.2;
+  pointer-events: none;
+}
+.no-user-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+#stats-content {
+  display: inline-block;
+  /*margin-left: 9em;
+  top: 5.2em;
+  position: absolute;*/
+  text-align: center;
+  border: 1px dotted #D7DEE3;
+  border-radius: 4px;
+  padding: 5px 10px;
+  max-width : 35em;
+  float: right;
+}
+#deploy-content {
+  display: inline-block;
+}
+#limit-message {
+  color: red;
+}
+#stats-container {
+  min-height: 15em;
+}
+.server-name a[href] {
+  display: inline-block;
+  padding: .2em .4em;
+  border-radius: 4px;
+  background-color: black;
+  color: white !important;
+}
+a.button.delete-server {
+  background: #cc0000 !important;
+  border-color: #c00;
+  text-shadow: none;
+}
+#xwikilicence {
+  display: none;
+}
+#xwikiplatformversion {
+  display: none;
+}
+#xwikicontent {
+  padding-bottom: 0;
+}</code>
+    </property>
+    <property>
+      <contentType>CSS</contentType>
+    </property>
+    <property>
+      <name/>
+    </property>
+    <property>
+      <parse/>
+    </property>
+    <property>
+      <use>currentPage</use>
+    </property>
+  </object>
+</xwikidoc>

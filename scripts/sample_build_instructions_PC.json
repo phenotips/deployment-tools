@@ -1,0 +1,88 @@
+{
+  "properties":
+  {
+    "server_port": 8080,
+    "ui_color": "#EA972D",
+    "ui_name": "PhenomeCentral",
+    "ui_link": "https://phenomecentral.org",
+    "supported_ui_actions": [ "load_pc_data" ],
+    "additional-links": [ {"name": "instance log", "url": ":8080/resources/serverlog.txt", "newline": true },
+                          { "name": "emails", "url": ":8090/FakeSMTP/received-emails/" } ]
+  },
+
+  "build":
+  [
+    {
+      "comment": "first build patient network",
+      "repo_shortcut": "PN",
+      "repo": "https://github.com/phenotips/patient-network",
+      "branch": "master",
+      "command": "mvn clean install -Pquick"
+    },
+    {
+      "comment": "then build remote matching",
+      "repo_shortcut": "RM",
+      "repo": "https://github.com/phenotips/remote-matching",
+      "branch": "master",
+      "command": "mvn clean install -Pquick"
+    },
+    {
+      "comment": "finally build PC",
+      "repo_shortcut": "PC",
+      "repo": "https://github.com/phenotips/phenomecentral.org",
+      "branch": "master",
+      "command": "mvn clean install -Pquick"
+    },
+    {
+      "comment": "build (optional) reindex extension for PT (used to reindex patients after dataset upload)",
+      "repo": "https://github.com/phenotips/deployment-tools",
+      "branch": "master",
+      "non_user_selectable_branch": true,   ### we don't want a branch selector for this repository in the UI
+      "sub_dir": "pc-test-deploy-rest",
+      "command": "mvn clean install -Pquick",
+      "continue_on_fail": true
+    }
+  ],
+
+  "deploy":
+  [
+    {
+      "comment": "deploy standalone version from a ZIP",
+      "action": "unzip",
+      "source_dir": "phenomecentral.org/standalone/target",
+      "source_files": ["phenomecentral-standalone*.zip"]
+      ### source_dir is relative to git root (by default "./github")
+    },
+    {
+      "comment": "install reindexing REST",
+      "action": "copy",
+      "source_dir": "deployment-tools/pc-test-deploy-rest/target",
+      "source_files": ["pc-test-deploy*.jar"],
+      "target_dir_re": "^phenomecentral*",
+      "target_sub_dir": "webapps/phenotips/WEB-INF/lib"
+      ### target_dir_re is relative to deploy root (by default "./deploy/build_name")
+      ### target_sub_dir is relative to target_dir_re
+    }
+  ],
+
+  "run":
+  [
+    {
+      "comment": "start PT, redirect stdout to a web-accessible location to view logs via web",
+      "directory_re": "^phenomecentral",
+      "command": "./start.sh",
+      "stdout_redirect_file": "webapps/phenotips/resources/serverlog.txt",
+      ### using "webapps/phenotips/resources/" because it is web-accessible through phenotips
+      "run_and_proceed": true
+      ### run_and_proceed when true the next step is executed without waiting for the process to finish (which is the default)
+    },
+    {
+      "comment": "wait for server to start before issuing the trigger command in the next step",
+      "command": "sleep 50s"
+    },
+    {
+      "comment": "trigger PT initialization",
+      "command": "curl http://localhost:8080"
+    }
+  ]
+}

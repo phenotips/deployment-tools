@@ -1,1 +1,2 @@
 org.phenotips.test.deployment.script.PCTestDeploymentScriptService
+org.phenotips.test.deployment.script.TestDeploymentScriptService
